@@ -7,8 +7,9 @@ import Enrollment from "./enrollment.model.js";
 
 const syncDB = async () => {
   try {
-    await sequelize.sync({ force: true }); 
-    console.log("All models synced successfully!");
+    const forceSync = process.env.FORCE_SYNC === "true";
+    await sequelize.sync({ force: forceSync });
+    console.log("All models synced successfully!", { forceSync });
   } catch (error) {
     console.error("Error syncing models:", error);
   }

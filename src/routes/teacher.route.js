@@ -3,6 +3,16 @@ import { Teacher } from "../models/index.js";
 
 const router = Router()
 
+// Get all teachers
+router.get('/', async (req, res) => {
+  try {
+    const teachers = await Teacher.findAll({ attributes: ['teacherId','name','email'] });
+    return res.json({ teachers });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
 // sign up logic
 router.post("/register", async (req, res) => {
   try {

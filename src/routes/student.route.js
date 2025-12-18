@@ -3,6 +3,17 @@ import { Student } from "../models/index.js";
 
 const router = Router();
 
+// Get all students
+router.get('/', async (req, res) => {
+  try {
+    const students = await Student.findAll({ attributes: ['stdId','name','email'] });
+    return res.json({ students });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
 router.post('/register',async (req,res)=>{
     try {
 

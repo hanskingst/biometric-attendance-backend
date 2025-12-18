@@ -1,0 +1,14 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DB_DIALECT=sqlite
+      - DB_NAME=attendance_db
+      - FORCE_SYNC=false
+    volumes:
+      - ./:/usr/src/app
+      - ./database.sqlite:/usr/src/app/database.sqlite
+    command: ["node", "src/server.js"]

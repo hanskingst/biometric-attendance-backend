@@ -3,19 +3,31 @@ import { Course } from "../models/index.js";
 
 const router = Router()
 
-router.post('/courses',async (req,res)=>{
+// Create a new course
+router.post('/course',async (req,res)=>{
 
-    const {title,startTime,endTime,instructorID} = req.body;
-    try {
+        const {title,startTime,endTime,instructorID} = req.body;
+        try {
 
-        const course = await Course.create({title,startTime,endTime,instructorID});
-        res.status(201).json({message:"course registered successfully",course});
+                const course = await Course.create({title,startTime,endTime,instructorID});
+                res.status(201).json({message:"course registered successfully",course});
         
-    } catch (error) {
-          console.error(err);
-    res.status(500).json({ message: "Server error" });
-    }
+        } catch (error) {
+                    console.error(error);
+                    res.status(500).json({ message: "Server error" });
+        }
 
+});
+
+// Get all courses
+router.get('/', async (req, res) => {
+    try {
+        const courses = await Course.findAll({ include: [] });
+        return res.json({ courses });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
 });
 
 export default router;
