@@ -10,7 +10,7 @@ This repository is a simple Node.js + Express backend for a student biometric at
 - DB: SQLite file `database.sqlite` stored in project root (recommended to persist when deploying)
 - Docker: `Dockerfile` and `docker-compose.yml` included
 
-## What I changed/added (useful context)
+## What AI changed/added
 
 - Added GET endpoints for listing students, teachers, and courses.
 - Added `src/middleware/requestCounter.js` — simple in-memory request counting middleware used by the admin dashboard.
@@ -111,11 +111,52 @@ All routes are JSON based (except the admin dashboard HTML) and return JSON resp
   - Note: `src/routes/index.js` currently has the attendance route commented out. To enable it, import and mount it there.
 
 - Admin (/admin)
+
   - GET /admin/stats
     - Returns JSON with request counters, counts and lists of students, teachers, and courses.
   - GET /admin/dashboard
     - Returns an HTML page summarizing counters and listing students/teachers/courses.
-    - Warning: Dashboard is not authenticated. Protect it before exposing publicly.
+    - Warning: Dashboard is protected with a simple admin credential in-memory; keep it private and don't expose it publicly without stronger security.
+
+  Admin delete endpoints (server-side)
+
+  These endpoints allow the administrator to remove entities. They require admin authentication (the app uses a simple admin token cookie or Basic Auth fallback). See `src/middleware/adminAuth.js` for details.
+
+  - DELETE /admin/students/:id
+
+    - Behavior: Deletes the student and cascades removal of related Enrollments and Attendance rows.
+    - Authentication: admin required (cookie or Basic Auth)
+    - Example:
+
+      ```bash
+      curl -X DELETE -u johnnystock@gmail.com:Jesus12@# http://localhost:3000/admin/students/1
+      ```
+
+  - DELETE /admin/courses/:id
+
+    - Behavior: Deletes the course and cascades removal of related Enrollments and Attendance rows.
+    - Authentication: admin required (cookie or Basic Auth)
+    - Example:
+
+      ```bash
+      curl -X DELETE -u johnnystock@gmail.com:Jesus12@# http://localhost:3000/admin/courses/1
+      ```
+
+  - DELETE /admin/teachers/:id
+
+    - Behavior: Prevents deletion if the teacher still has courses. You must reassign or delete their courses before deleting the teacher. This safeguard is intentional to protect referential integrity.
+    - Authentication: admin required (cookie or Basic Auth)
+    - Example (reassign/delete courses first, then):
+
+      ```bash
+      curl -X DELETE -u johnnystock@gmail.com:Jesus12@# http://localhost:3000/admin/teachers/1
+      ```
+
+  Notes:
+
+  - Admin login through the HTML form at `/admin/login` will set an HttpOnly cookie (`admin_token`) used to authenticate subsequent admin requests from the browser.
+  - For API calls from scripts you can use Basic Auth (username: admin email, password: admin password) which the server accepts as a fallback.
+  - Tokens are currently stored in-memory; they will be lost on server restart. For production, persist sessions and use stronger auth.
 
 ### Example curl requests
 
