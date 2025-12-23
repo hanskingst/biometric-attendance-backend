@@ -15,7 +15,7 @@ router.use('/students', studentRoute);
 router.use('/teachers', teacherRoute);
 router.use('/courses', courseRoute);
 router.use('/enrollments', enrollmentRoute);
-// router.use('/attendance',attendanceRoute);
+router.use('/attendance',attendanceRoute);
 
 // admin dashboard
 router.use('/admin', adminRoute);
