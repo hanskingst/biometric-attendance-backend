@@ -3,11 +3,17 @@ import { Teacher } from "../models/index.js";
 
 const router = Router()
 
-// Get all teachers
+// Get all teachers (with pagination)
 router.get('/', async (req, res) => {
   try {
-    const teachers = await Teacher.findAll({ attributes: ['teacherId','name','email'] });
-    return res.json({ teachers });
+    let page = parseInt(req.query.page || '1', 10);
+    let limit = parseInt(req.query.limit || '20', 10);
+    if (Number.isNaN(page) || page < 1) page = 1;
+    if (Number.isNaN(limit) || limit < 1) limit = 20;
+    const offset = (page - 1) * limit;
+    const { count, rows } = await Teacher.findAndCountAll({ attributes: ['teacherId','name','email'], limit, offset });
+    const totalPages = Math.ceil(count / limit) || 1;
+    return res.json({ data: rows, meta: { page, limit, total: count, totalPages } });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: 'Server error' });

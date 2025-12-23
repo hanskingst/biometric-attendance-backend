@@ -37,6 +37,27 @@ const Attendance = sequelize.define("Attendance", {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
   },
+  // New fields for status, audit and teacher overrides
+  status: {
+    type: DataTypes.ENUM('present', 'absent', 'manual'),
+    defaultValue: 'absent',
+  },
+  markedBy: {
+    type: DataTypes.ENUM('biometric', 'teacher', 'system'),
+    defaultValue: 'system',
+  },
+  markedAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  teacherId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  notes: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
 });
 
 // Relationships: Attendance belongs to Student and Course

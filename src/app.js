@@ -15,4 +15,9 @@ app.use(counterMiddleware);
 
 app.use('/',routes);
 
+// Lightweight healthcheck used by keep-alive pings
+app.get('/health', (req, res) => {
+	res.status(200).json({ status: 'ok' });
+});
+
 export default app;

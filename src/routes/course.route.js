@@ -19,11 +19,17 @@ router.post('/course',async (req,res)=>{
 
 });
 
-// Get all courses
+// Get all courses (with pagination)
 router.get('/', async (req, res) => {
     try {
-        const courses = await Course.findAll({ include: [] });
-        return res.json({ courses });
+        let page = parseInt(req.query.page || '1', 10);
+        let limit = parseInt(req.query.limit || '20', 10);
+        if (Number.isNaN(page) || page < 1) page = 1;
+        if (Number.isNaN(limit) || limit < 1) limit = 20;
+        const offset = (page - 1) * limit;
+        const { count, rows } = await Course.findAndCountAll({ limit, offset, order: [['courseID','ASC']] });
+        const totalPages = Math.ceil(count / limit) || 1;
+        return res.json({ data: rows, meta: { page, limit, total: count, totalPages } });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ message: 'Server error' });

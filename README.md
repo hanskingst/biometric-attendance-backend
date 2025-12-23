@@ -110,6 +110,14 @@ All routes are JSON based (except the admin dashboard HTML) and return JSON resp
     - Success: 200 OK, { message: "Attendance recorded", attendance }
   - Note: `src/routes/index.js` currently has the attendance route commented out. To enable it, import and mount it there.
 
+Detailed API documentation and exact request/response examples are available at the running server's `/docs` endpoint (http://localhost:3000/docs). The `/docs` page contains everything you need to implement the student mobile app and the teacher web app: required request bodies, query parameters, and full example responses for successful and error cases for all public endpoints (students, teachers, courses, enrollments, and attendance including manual marking, failed-list, and analytics).
+
+Important attendance-specific notes (summary):
+
+- The attendance POST endpoint will record biometric failures as an `absent` record (markedBy=system) instead of returning 400 — this allows teachers to review and manually override later.
+- Teacher manual marking endpoint: `POST /attendance/manual` (requires teacher Basic Auth) — marks or creates a manual attendance record (status=manual, markedBy=teacher).
+- Attendance list endpoint: `GET /attendance` supports filters `courseID` (required), `date` (YYYY-MM-DD), `stdId`, `status` and pagination `page`/`limit`. Response format: `{ data: [...], meta: { page, limit, total, totalPages } }`.
+
 - Admin (/admin)
 
   - GET /admin/stats
@@ -227,6 +235,23 @@ Notes about Render specifics:
 - Render does not run docker-compose — it runs a single container per service. Our `Dockerfile` is sufficient.
 - Persisting the SQLite file: Render supports a persistent disk for a service. You must mount it to a path inside the container (e.g., `/usr/src/app`) so `./database.sqlite` maps to the persistent storage. Without a persistent disk, the DB will be ephemeral and lost on deploy/scale.
 - For production, consider using a managed database (Postgres) instead of SQLite. If you switch to Postgres you should update `src/config/database.js` to use the Postgres dialect and provide the appropriate env vars and credentials, and install `pg` (npm package). Render provides managed Postgres as a separate service.
+
+## Keep-alive pinger (optional)
+
+If you're using a free Render plan that sleeps after inactivity, you can configure the app to periodically ping a URL to keep it awake. This repository includes a minimal background keep-alive task that will send a lightweight GET request every N seconds when configured.
+
+Configuration (set these as environment variables in your Render service):
+
+- KEEPALIVE_URL — required to enable the pinger. Set this to your public app URL (for example: `https://your-app.onrender.com/health`).
+- KEEPALIVE_INTERVAL_SECONDS — optional, defaults to `60` (one minute). Do not set this lower than 30 seconds to avoid unnecessary traffic.
+
+Notes and caution:
+
+- The pinger simply performs a GET and does not perform expensive work. However, keeping an app awake continuously may violate your provider's fair-use policies — use responsibly.
+- On Render set `KEEPALIVE_URL` to the external URL of your service (the pinger must hit the public endpoint for Render to consider the service active). Example: `https://my-app.onrender.com/health`.
+- The app exposes a lightweight `/health` endpoint that returns HTTP 200 and a tiny JSON payload; it's a good target for the pinger.
+
+If you want, I can add an OpenAPI JSON and mount Swagger UI at `/docs` instead of the inline HTML docs.
 
 ## Recommended small code change (optional but advised)
 
