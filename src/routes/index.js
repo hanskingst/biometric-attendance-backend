@@ -5,7 +5,7 @@ const router = Router();
 import studentRoute from "./student.route.js";
 import teacherRoute from "./teacher.route.js";
 import enrollmentRoute from "./enrollment.route.js";
-import attendanceRoute from "./attendance.route.js"; // Removed duplicate import
+import attendanceRoute from "./attendance.route.js"; 
 import courseRoute from "./course.route.js";
 import adminRoute from "./admin.route.js";
 import docsRoute from "./docs_clean.route.js";

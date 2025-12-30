@@ -183,10 +183,32 @@ router.get('/', async (req, res) => {
     }
 
     const offset = (page - 1) * limit;
-    const { count, rows } = await Attendance.findAndCountAll({ where, order: [['timestamp','DESC']], limit, offset });
+    const { count, rows } = await Attendance.findAndCountAll({
+      where,
+      order: [['timestamp','DESC']],
+      limit,
+      offset,
+      attributes: ['attId','stdId','courseID','fingerprinthash','timestamp','latitude','longitude','valid','createdAt','updatedAt'],
+      include: [{ model: Student, attributes: ['stdId', 'name', 'email'] }]
+    });
+
+    // map rows to include a flat student object for convenience
+    const data = rows.map(r => {
+      const item = r.toJSON ? r.toJSON() : r;
+      // If Student included, promote name/email to top-level student object
+      if (item.Student) {
+        item.student = {
+          stdId: item.Student.stdId,
+          name: item.Student.name,
+          email: item.Student.email
+        };
+        delete item.Student;
+      }
+      return item;
+    });
 
     const totalPages = Math.ceil(count / limit) || 1;
-    return res.json({ data: rows, meta: { page, limit, total: count, totalPages } });
+    return res.json({ data, meta: { page, limit, total: count, totalPages } });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Server error' });

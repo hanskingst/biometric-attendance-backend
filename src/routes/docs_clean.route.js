@@ -100,6 +100,11 @@ router.get('/', (req, res) => {
             <pre>{ "stdId": 1, "courseID": 1 }</pre>
             <p class="text-muted">Success (201):</p>
             <pre>{ "message": "Enrolled successfully", "enrollement": { "EnrolId": 1, "stdId":1, "courseID":1 } }</pre>
+
+            <hr />
+            <p class="mb-1 endpoint"><strong>GET</strong> <code>/enrollments?courseID=1</code></p>
+            <p class="text-muted">List students enrolled in a course (name, email, stdId).</p>
+            <pre>{ "courseID": 1, "students": [ { "stdId":1, "name":"Alice", "email":"alice@example.com" } ], "total": 12 }</pre>
           </div>
         </div>
 
@@ -119,7 +124,8 @@ router.get('/', (req, res) => {
 
             <hr />
             <p class="mb-1 endpoint"><strong>GET</strong> <code>/attendance?courseID=1&date=YYYY-MM-DD&page=1&limit=20&status=present&stdId=1</code></p>
-            <pre>{ "data": [ /* attendance rows */ ], "meta": { "page":1, "limit":20, "total":120, "totalPages":6 } }</pre>
+            <p class="text-muted">Each attendance item now includes a <code>student</code> object with name and email when available.</p>
+            <pre>{ "data": [ { "attId":12, "stdId":1, "courseID":1, "timestamp":"2025-12-23T08:31:23Z", "valid":true, "student": { "stdId":1, "name":"Alice", "email":"alice@example.com" } } ], "meta": { "page":1, "limit":20, "total":120, "totalPages":6 } }</pre>
 
             <hr />
             <p class="mb-1 endpoint"><strong>GET</strong> <code>/attendance/failed?courseID=1&date=YYYY-MM-DD</code></p>
