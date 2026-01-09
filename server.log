@@ -1,0 +1,7 @@
+
+> biometric_app@1.0.0 start
+> node src/server.js
+
+All models synced successfully! { forceSync: false, alter: true }
+Server running on http://localhost:3000
+KEEPALIVE_URL not set — keepalive pinger disabled. To enable set KEEPALIVE_URL=https://your-app.onrender.com

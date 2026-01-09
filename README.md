@@ -18,6 +18,8 @@ This repository is a simple Node.js + Express backend for a student biometric at
 - Updated `src/models/index.js` to avoid force-sync by default; use `FORCE_SYNC=true` when you want destructive sync.
 - Dockerfile switched to Debian-based image and includes build tools so native modules (sqlite3) install reliably.
 - `docker-compose.yml` mounts `./database.sqlite` into the container to persist the DB file.
+- Enhanced attendance model with new audit fields: `status` (present/absent/manual), `markedBy` (biometric/teacher/system), `markedAt`, `teacherId`, and `notes` for complete audit trails.
+- Updated schema migration strategy: uses `{alter: true}` by default for safe, non-destructive database migrations that preserve existing data.
 
 ## Run locally with Docker Compose (recommended)
 
@@ -52,6 +54,28 @@ docker run -p 3000:3000 -v "$(pwd)/database.sqlite:/usr/src/app/database.sqlite"
 - DB_DIALECT — Default: `sqlite` (already set in config). Other options (mysql/postgres) will require installing the appropriate driver.
 - DB_NAME, DB_USER, DB_PASSWORD, DB_HOST — used by `src/config/database.js` when dialect != sqlite
 - FORCE_SYNC — Set to `true` only in development to force sequelize to recreate tables.
+
+Example when running with docker-compose (already configured in `docker-compose.yml`):
+
+**Database Synchronization (Schema Migration Strategy)**
+
+The app automatically synchronizes your Sequelize models with the database on startup via `src/models/index.js`:
+
+- **Default behavior** (recommended for all environments including Render): Uses `{alter: true}` — safely modifies your database schema to match model definitions. This adds or alters columns without dropping tables or losing any data. Perfect for production because you can push code updates without downtime or data loss.
+- **Force mode** (development only): Set `FORCE_SYNC=true` environment variable to use `{force: true}`, which **destructively drops and recreates all tables**. This will **permanently delete all data** (students, courses, attendance records, etc.). Use only during initial development when data isn't important.
+
+**How it works on startup:**
+
+1. Server starts and calls `syncDB()` from `src/models/index.js`
+2. If `FORCE_SYNC=true`: Drops existing tables and recreates them from model definitions
+3. If `FORCE_SYNC=false` (default): Compares models with existing database and applies safe alterations (adds new columns, updates column types, etc.)
+4. For SQLite: Temporarily disables foreign key constraints during migration to prevent constraint errors, then re-enables them
+5. Server is ready to handle requests
+
+**Recommended configuration:**
+
+- Development (local): Can use either `FORCE_SYNC=true` or `false`; `true` is convenient if you want a clean slate
+- Staging/Production (Render): **Always use `FORCE_SYNC=false`** to preserve all data when deploying updates
 
 Example when running with docker-compose (already configured in `docker-compose.yml`):
 
@@ -118,53 +142,104 @@ Important attendance-specific notes (summary):
 - Teacher manual marking endpoint: `POST /attendance/manual` (requires teacher Basic Auth) — marks or creates a manual attendance record (status=manual, markedBy=teacher).
 - Attendance list endpoint: `GET /attendance` supports filters `courseID` (required), `date` (YYYY-MM-DD), `stdId`, `status` and pagination `page`/`limit`. Response format: `{ data: [...], meta: { page, limit, total, totalPages } }`.
 
-- Admin (/admin)
+**New Attendance Fields (Audit & Status Tracking)**
 
-  - GET /admin/stats
+The attendance model now includes comprehensive audit trail fields:
+
+- **`status`** — ENUM: `'present'` (biometric matched), `'absent'` (biometric failed or marked absent), `'manual'` (teacher override). Defaults to `'absent'`.
+- **`markedBy`** — ENUM: `'biometric'` (fingerprint system), `'teacher'` (manual marking), `'system'` (automatic action). Helps you trace the source of each record.
+- **`markedAt`** — ISO timestamp when status was recorded.
+- **`teacherId`** — Optional ID when teacher marks attendance manually.
+- **`notes`** — Optional text for teacher comments (e.g., "Late arrival", "Medical exemption").
+- **`valid`** — Boolean flag for biometric validation status.
+
+**Example response (successful biometric)**:
+
+```json
+{
+  "message": "Attendance recorded",
+  "attendance": {
+    "attId": 1,
+    "stdId": 1,
+    "courseID": 1,
+    "fingerprinthash": "abc123xyz789valid123",
+    "latitude": "4.1533",
+    "longitude": "9.2927",
+    "timestamp": "2026-01-09T08:31:45.741Z",
+    "status": "present",
+    "markedBy": "biometric",
+    "markedAt": "2026-01-09T08:31:45.741Z",
+    "valid": true
+  }
+}
+```
+
+**Example response (failed biometric)**:
+
+```json
+{
+  "message": "Biometric failed - recorded as absent",
+  "attendance": {
+    "attId": 2,
+    "stdId": 1,
+    "courseID": 1,
+    "fingerprinthash": "abc",
+    "latitude": "4.1533",
+    "longitude": "9.2927",
+    "timestamp": "2026-01-09T08:31:52.301Z",
+    "status": "absent",
+    "markedBy": "system",
+    "markedAt": "2026-01-09T08:31:52.301Z",
+    "valid": false
+  }
+}
+```
+
     - Returns JSON with request counters, counts and lists of students, teachers, and courses.
-  - GET /admin/dashboard
-    - Returns an HTML page summarizing counters and listing students/teachers/courses.
-    - Warning: Dashboard is protected with a simple admin credential in-memory; keep it private and don't expose it publicly without stronger security.
 
-  Admin delete endpoints (server-side)
+- GET /admin/dashboard
+  - Returns an HTML page summarizing counters and listing students/teachers/courses.
+  - Warning: Dashboard is protected with a simple admin credential in-memory; keep it private and don't expose it publicly without stronger security.
 
-  These endpoints allow the administrator to remove entities. They require admin authentication (the app uses a simple admin token cookie or Basic Auth fallback). See `src/middleware/adminAuth.js` for details.
+Admin delete endpoints (server-side)
 
-  - DELETE /admin/students/:id
+These endpoints allow the administrator to remove entities. They require admin authentication (the app uses a simple admin token cookie or Basic Auth fallback). See `src/middleware/adminAuth.js` for details.
 
-    - Behavior: Deletes the student and cascades removal of related Enrollments and Attendance rows.
-    - Authentication: admin required (cookie or Basic Auth)
-    - Example:
+- DELETE /admin/students/:id
 
-      ```bash
-      curl -X DELETE -u johnnystock@gmail.com:Jesus12@# http://localhost:3000/admin/students/1
-      ```
+  - Behavior: Deletes the student and cascades removal of related Enrollments and Attendance rows.
+  - Authentication: admin required (cookie or Basic Auth)
+  - Example:
 
-  - DELETE /admin/courses/:id
+    ```bash
+    curl -X DELETE -u johnnystock@gmail.com:Jesus12@# http://localhost:3000/admin/students/1
+    ```
 
-    - Behavior: Deletes the course and cascades removal of related Enrollments and Attendance rows.
-    - Authentication: admin required (cookie or Basic Auth)
-    - Example:
+- DELETE /admin/courses/:id
 
-      ```bash
-      curl -X DELETE -u johnnystock@gmail.com:Jesus12@# http://localhost:3000/admin/courses/1
-      ```
+  - Behavior: Deletes the course and cascades removal of related Enrollments and Attendance rows.
+  - Authentication: admin required (cookie or Basic Auth)
+  - Example:
 
-  - DELETE /admin/teachers/:id
+    ```bash
+    curl -X DELETE -u johnnystock@gmail.com:Jesus12@# http://localhost:3000/admin/courses/1
+    ```
 
-    - Behavior: Prevents deletion if the teacher still has courses. You must reassign or delete their courses before deleting the teacher. This safeguard is intentional to protect referential integrity.
-    - Authentication: admin required (cookie or Basic Auth)
-    - Example (reassign/delete courses first, then):
+- DELETE /admin/teachers/:id
 
-      ```bash
-      curl -X DELETE -u johnnystock@gmail.com:Jesus12@# http://localhost:3000/admin/teachers/1
-      ```
+  - Behavior: Prevents deletion if the teacher still has courses. You must reassign or delete their courses before deleting the teacher. This safeguard is intentional to protect referential integrity.
+  - Authentication: admin required (cookie or Basic Auth)
+  - Example (reassign/delete courses first, then):
 
-  Notes:
+    ```bash
+    curl -X DELETE -u johnnystock@gmail.com:Jesus12@# http://localhost:3000/admin/teachers/1
+    ```
 
-  - Admin login through the HTML form at `/admin/login` will set an HttpOnly cookie (`admin_token`) used to authenticate subsequent admin requests from the browser.
-  - For API calls from scripts you can use Basic Auth (username: admin email, password: admin password) which the server accepts as a fallback.
-  - Tokens are currently stored in-memory; they will be lost on server restart. For production, persist sessions and use stronger auth.
+Notes:
+
+- Admin login through the HTML form at `/admin/login` will set an HttpOnly cookie (`admin_token`) used to authenticate subsequent admin requests from the browser.
+- For API calls from scripts you can use Basic Auth (username: admin email, password: admin password) which the server accepts as a fallback.
+- Tokens are currently stored in-memory; they will be lost on server restart. For production, persist sessions and use stronger auth.
 
 ### Example curl requests
 
@@ -229,6 +304,20 @@ High-level steps:
    - (optional) PORT=10000 or let Render provide $PORT — recommended: update `src/server.js` to use `process.env.PORT || 3000`.
 5. Enable a Persistent Disk in Render and mount it to the container path where SQLite file is stored (the project expects `./database.sqlite` in the working directory `/usr/src/app`). In Render's UI, mount the persistent disk to `/usr/src/app` (or to a subdirectory and update `storage` path in `src/config/database.js`).
 6. Deploy and monitor the logs. The server will start and Sequelize will create `database.sqlite` in the persistent disk location.
+
+**Automatic Schema Migration on Deployment**
+
+When you push code with updated models (e.g., the new `status` field):
+
+1. Render detects changes and rebuilds the container
+2. Server starts and calls `syncDB()` with `{alter: true}` (default)
+3. Database is automatically updated — new columns added to existing tables
+4. All existing data is preserved — zero data loss
+5. Your app is ready immediately with the new fields available
+
+This is one of the key benefits of the `{alter: true}` migration strategy — you can deploy model changes to production without manual steps or downtime.
+
+**⚠️ Warning:** Ensure `FORCE_SYNC=false` on Render. If set to `true`, it will destroy all production data on the next deploy.
 
 Notes about Render specifics:
 

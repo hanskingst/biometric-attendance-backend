@@ -9,11 +9,24 @@ import CourseLocation from "./courseLocation.model.js";
 const syncDB = async () => {
   try {
     const forceSync = process.env.FORCE_SYNC === "true";
+    const dialect = process.env.DB_DIALECT || "sqlite";
+    
+    // For SQLite with alter: true, we need to disable foreign keys temporarily
+    if (dialect === "sqlite" && !forceSync) {
+      await sequelize.query("PRAGMA foreign_keys = OFF");
+    }
+    
     const syncOptions = forceSync 
       ? { force: true }  // Destructive: drop and recreate tables
       : { alter: true }; // Safe: alter tables to match models
     
     await sequelize.sync(syncOptions);
+    
+    // Re-enable foreign keys
+    if (dialect === "sqlite" && !forceSync) {
+      await sequelize.query("PRAGMA foreign_keys = ON");
+    }
+    
     console.log("All models synced successfully!", { forceSync, alter: !forceSync });
   } catch (error) {
     console.error("Error syncing models:", error);

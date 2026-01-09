@@ -29,6 +29,18 @@ router.get('/', (req, res) => {
         <small class="text-muted">Replace {host} with your server host (e.g. http://localhost:3000).</small>
       </div>
 
+      <div class="card p-3">
+        <h5 class="mb-2">Database & Deployment (important)</h5>
+        <p class="small text-muted">Notes for deploying and schema changes (Render / production).</p>
+        <ul>
+          <li>The server auto-syncs Sequelize models on startup via <code>src/models/index.js</code>.</li>
+          <li>Default behavior: <strong>uses <code>{ alter: true }</code></strong> to safely add/alter columns without dropping tables. This preserves data when you push model changes.</li>
+          <li>Developer-only destructive mode: set <code>FORCE_SYNC=true</code> to use <code>{ force: true }</code> (drops and recreates tables — <strong>will delete data</strong>).</li>
+          <li>SQLite-specific: the startup logic temporarily disables foreign-key checks while altering schema to avoid constraint errors, then re-enables them.</li>
+          <li>On Render: mount a persistent disk for <code>./database.sqlite</code> and ensure <code>FORCE_SYNC=false</code> in service environment variables — otherwise a deploy may destroy data.</li>
+        </ul>
+      </div>
+
       <h3>Students</h3>
       <div class="card p-3">
         <h5 class="mb-2 endpoint">POST /students/register</h5>
