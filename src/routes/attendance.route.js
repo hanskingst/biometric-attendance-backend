@@ -9,7 +9,7 @@ const router = Router();
 const DEFAULT_SCHOOL_LAT = 4.1533;
 const DEFAULT_SCHOOL_LON = 9.2927;
 // Radius enforced on server side (meters)
-const RADIUS_METERS = 8;
+const RADIUS_METERS = 100;
 // Minimum sample count before we infer a stable course location
 const MIN_SAMPLES_TO_INFER = 5;
 
@@ -41,6 +41,7 @@ router.post("/", async (req, res) => {
   const { stdId, courseID, fingerprinthash, latitude, longitude, school_lat, school_lon } = req.body;
 
   try {
+    const now = new Date();
     const isEnrolled = await Enrollment.findOne({
       where: { stdId, courseID }
     });
