@@ -444,4 +444,27 @@ router.delete('/:attId', teacherAuth, async (req, res) => {
   }
 });
 
+// DEBUG: GET all CourseLocation records (temporary - remove after debugging)
+router.get('/debug/locations', async (req, res) => {
+  try {
+    const locations = await CourseLocation.findAll();
+    return res.json({ locations });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// DEBUG: DELETE CourseLocation record by courseID (temporary - remove after debugging)
+router.delete('/debug/locations/:courseID', async (req, res) => {
+  try {
+    const { courseID } = req.params;
+    const deleted = await CourseLocation.destroy({ where: { courseID } });
+    return res.json({ message: `Deleted ${deleted} CourseLocation record(s) for courseID ${courseID}` });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
 export default router;
