@@ -147,6 +147,14 @@ router.get('/dashboard', requireAdmin, async (req, res) => {
     const students = await Student.findAll({ attributes: ['stdId','name','email'] });
     const teachers = await Teacher.findAll({ attributes: ['teacherId','name','email'] });
     const courses = await Course.findAll({ attributes: ['courseID','title','startTime','endTime','instructorID'] });
+    const attendances = await Attendance.findAll({ 
+      order: [['timestamp', 'DESC']],
+      limit: 50,
+      include: [
+        { model: Student, attributes: ['stdId', 'name'] },
+        { model: Course, attributes: ['courseID', 'title'] }
+      ]
+    });
 
     const html = `<!doctype html>
     <html>
@@ -258,6 +266,29 @@ router.get('/dashboard', requireAdmin, async (req, res) => {
           </div>
         </div>
 
+        <div class="table-wrap mt-4">
+          <h5>Attendance Records (Latest 50)</h5>
+          <div class="table-responsive">
+            <table class="table table-hover">
+              <thead><tr><th>ID</th><th>Student</th><th>Course</th><th>Status</th><th>Timestamp</th><th>Marked By</th><th>Action</th></tr></thead>
+              <tbody>
+                ${attendances.map(a => {
+                  const att = a.toJSON ? a.toJSON() : a;
+                  return `<tr data-id="${att.attId}">
+                    <td>${att.attId}</td>
+                    <td>${att.Student?.name || 'N/A'} (${att.stdId})</td>
+                    <td>${att.Course?.title || 'N/A'} (${att.courseID})</td>
+                    <td><span class="badge ${att.status === 'present' ? 'bg-success' : att.status === 'absent' ? 'bg-danger' : 'bg-warning'}">${att.status}</span></td>
+                    <td>${new Date(att.timestamp).toLocaleString()}</td>
+                    <td>${att.markedBy || 'N/A'}</td>
+                    <td><button class="btn btn-sm btn-danger delete-attendance">Delete</button></td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <script>
           // helper to send DELETE and update UI
           async function sendDelete(url){
@@ -288,6 +319,12 @@ router.get('/dashboard', requireAdmin, async (req, res) => {
               const row = e.target.closest('tr');
               const id = row.getAttribute('data-id');
               const r = await sendDelete('/admin/courses/' + id);
+              if(r) row.remove();
+            }
+            if(e.target.matches('.delete-attendance')){
+              const row = e.target.closest('tr');
+              const id = row.getAttribute('data-id');
+              const r = await sendDelete('/admin/attendance/' + id);
               if(r) row.remove();
             }
           });
