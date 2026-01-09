@@ -13,20 +13,6 @@ const RADIUS_METERS = 100;
 // Minimum sample count before we infer a stable course location
 const MIN_SAMPLES_TO_INFER = 5;
 
-// Simple distance checker - accepts school coords (passed from frontend)
-function isWithinRadius(userLat, userLon, schoolLat = DEFAULT_SCHOOL_LAT, schoolLon = DEFAULT_SCHOOL_LON) {
-  const latDiff = Math.abs(userLat - schoolLat);
-  const lonDiff = Math.abs(userLon - schoolLon);
-
-  // Rough conversion: 0.0001 ≈ 11 meters (approximate, OK for short distances)
-  const latMeters = latDiff * 111000;
-  const lonMeters = lonDiff * 111000;
-
-  const distance = Math.sqrt(latMeters ** 2 + lonMeters ** 2);
-
-  return distance <= RADIUS_METERS;
-}
-
 // Calculate exact distance in meters for error reporting
 function calculateDistance(userLat, userLon, schoolLat, schoolLon) {
   const latDiff = Math.abs(userLat - schoolLat);
@@ -137,18 +123,9 @@ router.post("/", async (req, res) => {
           });
           console.log(`✓ CourseLocation inferred for courseID ${courseID}: (${avgLat.toFixed(4)}, ${avgLon.toFixed(4)}) from ${samples.length} samples`);
           
-          // NOW enforce: check if this submission is within the inferred radius
-          const distance = calculateDistance(userLat, userLon, avgLat, avgLon);
-          insideRadius = distance <= RADIUS_METERS;
-          if (!insideRadius) {
-            return res.status(400).json({ 
-              message: `Your location is ${Math.round(distance)}m away from the course location (${Math.round(RADIUS_METERS)}m allowed). Are you on campus?`,
-              distance,
-              allowed: RADIUS_METERS,
-              courseLocation: { lat: avgLat, lon: avgLon },
-              yourLocation: { lat: userLat, lon: userLon }
-            });
-          }
+          // This submission is part of the learning phase - accept it
+          // Only enforce radius for future submissions (when courseLoc already exists)
+          insideRadius = true;
         } catch (e) {
           console.warn('Failed to persist inferred course location', e);
           insideRadius = true; // Accept anyway
