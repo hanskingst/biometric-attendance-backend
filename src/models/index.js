@@ -9,8 +9,12 @@ import CourseLocation from "./courseLocation.model.js";
 const syncDB = async () => {
   try {
     const forceSync = process.env.FORCE_SYNC === "true";
-    await sequelize.sync({ force: forceSync });
-    console.log("All models synced successfully!", { forceSync });
+    const syncOptions = forceSync 
+      ? { force: true }  // Destructive: drop and recreate tables
+      : { alter: true }; // Safe: alter tables to match models
+    
+    await sequelize.sync(syncOptions);
+    console.log("All models synced successfully!", { forceSync, alter: !forceSync });
   } catch (error) {
     console.error("Error syncing models:", error);
   }
