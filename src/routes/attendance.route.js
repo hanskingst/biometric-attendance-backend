@@ -27,7 +27,7 @@ function isWithinRadius(userLat, userLon, schoolLat = DEFAULT_SCHOOL_LAT, school
   return distance <= RADIUS_METERS;
 }
 
-router.post("/attendance", async (req, res) => {
+router.post("/", async (req, res) => {
   // Accept school coordinates from frontend: school_lat, school_lon (optional but recommended)
   const { stdId, courseID, fingerprinthash, latitude, longitude, school_lat, school_lon } = req.body;
 
@@ -158,7 +158,6 @@ router.post("/attendance", async (req, res) => {
   }
 });
 
-export default router;
 
 
 // GET /attendance  (list with filters + pagination)
@@ -369,3 +368,5 @@ router.get('/stats/:teacherID', async (req, res) => {
     return res.status(500).json({ message: 'Server error' });
   }
 });
+
+export default router;
