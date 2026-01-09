@@ -303,4 +303,32 @@ router.get('/dashboard', requireAdmin, async (req, res) => {
   }
 });
 
+// DELETE /admin/attendance/:attId  (super admin unrestricted delete)
+router.delete('/attendance/:attId', requireAdmin, async (req, res) => {
+  try {
+    const { attId } = req.params;
+
+    if (!attId) {
+      return res.status(400).json({ message: 'attId is required' });
+    }
+
+    const attendance = await Attendance.findByPk(attId);
+    if (!attendance) {
+      return res.status(404).json({ message: 'Attendance record not found' });
+    }
+
+    // Delete the attendance record
+    await attendance.destroy();
+    return res.json({ 
+      message: 'Attendance record deleted successfully', 
+      attId: parseInt(attId, 10),
+      stdId: attendance.stdId,
+      courseID: attendance.courseID
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
 export default router;

@@ -9,7 +9,7 @@ const router = Router();
 const DEFAULT_SCHOOL_LAT = 4.1533;
 const DEFAULT_SCHOOL_LON = 9.2927;
 // Radius enforced on server side (meters)
-const RADIUS_METERS = 100;
+const RADIUS_METERS = 8;
 // Minimum sample count before we infer a stable course location
 const MIN_SAMPLES_TO_INFER = 5;
 
@@ -27,6 +27,15 @@ function isWithinRadius(userLat, userLon, schoolLat = DEFAULT_SCHOOL_LAT, school
   return distance <= RADIUS_METERS;
 }
 
+// Calculate exact distance in meters for error reporting
+function calculateDistance(userLat, userLon, schoolLat, schoolLon) {
+  const latDiff = Math.abs(userLat - schoolLat);
+  const lonDiff = Math.abs(userLon - schoolLon);
+  const latMeters = latDiff * 111000;
+  const lonMeters = lonDiff * 111000;
+  return Math.sqrt(latMeters ** 2 + lonMeters ** 2);
+}
+
 router.post("/", async (req, res) => {
   // Accept school coordinates from frontend: school_lat, school_lon (optional but recommended)
   const { stdId, courseID, fingerprinthash, latitude, longitude, school_lat, school_lon } = req.body;
@@ -42,7 +51,7 @@ router.post("/", async (req, res) => {
 
     const course = await Course.findByPk(courseID);
     if (!course) {
-      return res.status(404).json({ message: "Course not found" });
+      return res.status(404).json({ message: "Course not found" });                                                                                                                                                                           
     }
 
     // Location check (simple radius logic)
@@ -57,19 +66,43 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: 'Invalid latitude/longitude' });
     }
 
-    /* Determine authoritative school location for this course.
-     Prefer a stored CourseLocation (inferred from historical attendance). If none exists yet,
-     attempt to infer it from recent attendance samples (including this submission). If not enough
-     samples yet, we will accept the attendance and store it; inference will happen when enough
-     data is collected.*/
+    /* Location Strategy: Learn → Enforce
+     
+     PHASE 1 (< 5 samples): Learning phase
+     - Accept any location submission
+     - Collect samples to learn actual course location
+     - No rejection for location
+     
+     PHASE 2 (>= 5 samples): Enforcement phase
+     - Course location inferred from average of 5+ submissions
+     - New submissions must be within RADIUS_METERS of inferred location
+     - Clear error message if outside radius
+     
+     This allows campus diversity while preventing abuse once location is learned.*/
      
     let courseLoc = await CourseLocation.findOne({ where: { courseID } });
-    let insideSchool = false;
-
+    let insideRadius = false;
+    let samplesCollected = 0;
+    
     if (courseLoc) {
-      insideSchool = isWithinRadius(userLat, userLon, parseFloat(courseLoc.schoolLat), parseFloat(courseLoc.schoolLon));
+      // PHASE 2: Location already inferred — enforce radius check
+      const distance = calculateDistance(userLat, userLon, parseFloat(courseLoc.schoolLat), parseFloat(courseLoc.schoolLon));
+      insideRadius = distance <= RADIUS_METERS;
+      
+      if (!insideRadius) {
+        return res.status(400).json({ 
+          message: `Your location is ${Math.round(distance)}m away from the course location (${Math.round(RADIUS_METERS)}m allowed). Are you on campus?`,
+          distance,
+          allowed: RADIUS_METERS,
+          courseLocation: { 
+            lat: parseFloat(courseLoc.schoolLat), 
+            lon: parseFloat(courseLoc.schoolLon) 
+          },
+          yourLocation: { lat: userLat, lon: userLon }
+        });
+      }
     } else {
-      // gather recent attendance samples (lat/lon present)
+      // PHASE 1: Still learning — collect samples
       const recent = await Attendance.findAll({
         where: {
           courseID,
@@ -80,7 +113,6 @@ router.post("/", async (req, res) => {
         limit: MIN_SAMPLES_TO_INFER - 1
       });
 
-      // include current sample
       const samples = [];
       for (const r of recent) {
         const lat = parseFloat(r.latitude);
@@ -88,33 +120,43 @@ router.post("/", async (req, res) => {
         if (!Number.isNaN(lat) && !Number.isNaN(lon)) samples.push({ lat, lon });
       }
       samples.push({ lat: userLat, lon: userLon });
+      samplesCollected = samples.length;
 
       if (samples.length >= MIN_SAMPLES_TO_INFER) {
         const sum = samples.reduce((acc, s) => { acc.lat += s.lat; acc.lon += s.lon; return acc; }, { lat: 0, lon: 0 });
         const avgLat = sum.lat / samples.length;
         const avgLon = sum.lon / samples.length;
 
-        // persist inferred location for the course
         try {
-          courseLoc = await CourseLocation.create({ courseID, schoolLat: avgLat, schoolLon: avgLon, samples: samples.length });
-          insideSchool = isWithinRadius(userLat, userLon, avgLat, avgLon);
+          courseLoc = await CourseLocation.create({ 
+            courseID, 
+            schoolLat: avgLat, 
+            schoolLon: avgLon, 
+            samples: samples.length 
+          });
+          console.log(`✓ CourseLocation inferred for courseID ${courseID}: (${avgLat.toFixed(4)}, ${avgLon.toFixed(4)}) from ${samples.length} samples`);
+          
+          // NOW enforce: check if this submission is within the inferred radius
+          const distance = calculateDistance(userLat, userLon, avgLat, avgLon);
+          insideRadius = distance <= RADIUS_METERS;
+          if (!insideRadius) {
+            return res.status(400).json({ 
+              message: `Your location is ${Math.round(distance)}m away from the course location (${Math.round(RADIUS_METERS)}m allowed). Are you on campus?`,
+              distance,
+              allowed: RADIUS_METERS,
+              courseLocation: { lat: avgLat, lon: avgLon },
+              yourLocation: { lat: userLat, lon: userLon }
+            });
+          }
         } catch (e) {
           console.warn('Failed to persist inferred course location', e);
-          // fallback: evaluate against default
-          insideSchool = isWithinRadius(userLat, userLon, DEFAULT_SCHOOL_LAT, DEFAULT_SCHOOL_LON);
+          insideRadius = true; // Accept anyway
         }
       } else {
-        // Not enough samples to infer; accept current attendance (store) and let future submissions build the sample set.
-        insideSchool = true; // provisional acceptance until we infer
+        // Not enough samples yet — accept this submission to grow the sample pool
+        insideRadius = true;
+        console.log(`→ Location learning phase for courseID ${courseID}: ${samplesCollected}/${MIN_SAMPLES_TO_INFER} samples collected`);
       }
-    }
-    const now = new Date();
-    if (now < new Date(course.startTime) || now > new Date(course.endTime)) {
-      return res.status(400).json({ message: "Attendance outside allowed time and outside school" });
-    }
-
-    if(!insideSchool){
-      return res.status(400).json({message:"location outside school"});
     }
 
     //Fingerprint presence check (simple mock)
@@ -161,19 +203,39 @@ router.post("/", async (req, res) => {
 
 
 // GET /attendance  (list with filters + pagination)
+// All filters are optional: courseID, stdId, status, date
 router.get('/', async (req, res) => {
   try {
-    const { courseID, date, stdId, status } = req.query;
-    let page = parseInt(req.query.page || '1', 10);
-    let limit = parseInt(req.query.limit || '20', 10);
+    const { courseID, date, stdId, status, page: pageStr = '1', limit: limitStr = '20' } = req.query;
+    
+    // Parse and validate pagination
+    let page = parseInt(pageStr, 10);
+    let limit = parseInt(limitStr, 10);
     if (Number.isNaN(page) || page < 1) page = 1;
-    if (Number.isNaN(limit) || limit < 1) limit = 20;
+    if (Number.isNaN(limit) || limit < 1 || limit > 100) limit = 20;
+    
+    // Build where clause dynamically (all filters optional)
     const where = {};
-    if (courseID) where.courseID = courseID;
-    if (stdId) where.stdId = stdId;
-    if (status) where.status = status;
-    if (date) {
-      // filter by date (YYYY-MM-DD)
+    
+    // courseID filter (numeric, optional)
+    if (courseID) {
+      const parsedCourseID = parseInt(courseID, 10);
+      if (!Number.isNaN(parsedCourseID)) where.courseID = parsedCourseID;
+    }
+    
+    // stdId filter (numeric, optional)
+    if (stdId) {
+      const parsedStdId = parseInt(stdId, 10);
+      if (!Number.isNaN(parsedStdId)) where.stdId = parsedStdId;
+    }
+    
+    // status filter (enum validation, optional)
+    if (status && ['present', 'absent', 'manual'].includes(status)) {
+      where.status = status;
+    }
+    
+    // date filter (format: YYYY-MM-DD, optional)
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
       where.timestamp = {
         [Op.between]: [new Date(date + 'T00:00:00Z'), new Date(date + 'T23:59:59Z')]
       };
@@ -363,6 +425,41 @@ router.get('/stats/:teacherID', async (req, res) => {
         absentPercentage
       }
     });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// DELETE /attendance/:attId  (teacher can delete from their own courses)
+router.delete('/:attId', teacherAuth, async (req, res) => {
+  try {
+    const { attId } = req.params;
+    const teacherId = req.teacher.teacherId;
+
+    if (!attId) {
+      return res.status(400).json({ message: 'attId is required' });
+    }
+
+    const attendance = await Attendance.findByPk(attId);
+    if (!attendance) {
+      return res.status(404).json({ message: 'Attendance record not found' });
+    }
+
+    // Get the course to verify teacher ownership
+    const course = await Course.findByPk(attendance.courseID);
+    if (!course) {
+      return res.status(404).json({ message: 'Course not found' });
+    }
+
+    // Verify teacher owns this course
+    if (parseInt(course.instructorID, 10) !== parseInt(teacherId, 10)) {
+      return res.status(403).json({ message: 'You can only delete attendance from your own courses' });
+    }
+
+    // Delete the attendance record
+    await attendance.destroy();
+    return res.json({ message: 'Attendance record deleted successfully', attId: parseInt(attId, 10) });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Server error' });
