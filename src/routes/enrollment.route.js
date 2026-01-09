@@ -18,13 +18,12 @@ router.post('/', async (req,res)=>{
    }
 });
 
-// GET /enrollments?courseID=1  -> list students for a course (name/email/stdId)
-router.get('/', async (req, res) => {
+// GET /enrollments/course/:courseID  -> list students for a course (name/email/stdId) with total count
+router.get('/course/:courseID', async (req, res) => {
    try {
-      const { courseID } = req.query;
-      if (!courseID) return res.status(400).json({ message: 'courseID is required' });
+      const { courseID } = req.params;
 
-      // Prefer using Course include to leverage many-to-many association
+      
       const CourseModel = (await import('../models/course.model.js')).default;
       const StudentModel = (await import('../models/student.model.js')).default;
 
@@ -34,9 +33,34 @@ router.get('/', async (req, res) => {
 
       if (!course) return res.status(404).json({ message: 'Course not found' });
 
-      // course.Students will be an array of student objects
+      // course.Students is be an array of student objects
       const students = (course.Students || []).map(s => ({ stdId: s.stdId, name: s.name, email: s.email }));
-      return res.json({ courseID: courseID, students, total: students.length });
+      const totalStudents = students.length;
+      return res.json({ courseID: parseInt(courseID, 10), students, totalStudents });
+   } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Server error' });
+   }
+});
+
+// GET /enrollments/student/:stdId  -> list courses for a student
+router.get('/student/:stdId', async (req, res) => {
+   try {
+      const { stdId } = req.params;
+
+      // Import models
+      const StudentModel = (await import('../models/student.model.js')).default;
+      const CourseModel = (await import('../models/course.model.js')).default;
+
+      const student = await StudentModel.findByPk(stdId, {
+         include: [{ model: CourseModel, attributes: ['courseID', 'title', 'instructorID', 'startTime', 'endTime'] }]
+      });
+
+      if (!student) return res.status(404).json({ message: 'Student not found' });
+
+      // student.Courses will be an array of course objects
+      const courses = (student.Courses || []).map(c => ({ courseID: c.courseID, title: c.title, instructorID: c.instructorID, startTime: c.startTime, endTime: c.endTime }));
+      return res.json({ stdId: parseInt(stdId, 10), courses });
    } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Server error' });

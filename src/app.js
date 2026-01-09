@@ -7,9 +7,9 @@ const app = express();
 
 // CORS configuration
 const allowedOrigins = [
-	'http://localhost:5173',  // Vite dev server
-	process.env.FRONTEND_URL || '' // Production frontend URL (set via environment variable)
-].filter(origin => origin); // Remove empty strings
+	'http://localhost:5173',  
+	process.env.FRONTEND_URL || '' 
+].filter(origin => origin); 
 
 const corsOptions = {
 	origin: allowedOrigins,

@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { Op } from "sequelize";
-import sequelize from "../config/database.js";
 import teacherAuth from "../middleware/teacherAuth.js";
 import { Enrollment, Course, Attendance, CourseLocation, Student } from "../models/index.js";
 
@@ -58,11 +57,12 @@ router.post("/attendance", async (req, res) => {
       return res.status(400).json({ message: 'Invalid latitude/longitude' });
     }
 
-    // Determine authoritative school location for this course.
-    // Prefer a stored CourseLocation (inferred from historical attendance). If none exists yet,
-    // attempt to infer it from recent attendance samples (including this submission). If not enough
-    // samples yet, we will accept the attendance and store it; inference will happen when enough
-    // data is collected.
+    /* Determine authoritative school location for this course.
+     Prefer a stored CourseLocation (inferred from historical attendance). If none exists yet,
+     attempt to infer it from recent attendance samples (including this submission). If not enough
+     samples yet, we will accept the attendance and store it; inference will happen when enough
+     data is collected.*/
+     
     let courseLoc = await CourseLocation.findOne({ where: { courseID } });
     let insideSchool = false;
 
@@ -160,7 +160,6 @@ router.post("/attendance", async (req, res) => {
 
 export default router;
 
-// -- Additional endpoints --
 
 // GET /attendance  (list with filters + pagination)
 router.get('/', async (req, res) => {
@@ -171,8 +170,7 @@ router.get('/', async (req, res) => {
     if (Number.isNaN(page) || page < 1) page = 1;
     if (Number.isNaN(limit) || limit < 1) limit = 20;
     const where = {};
-    if (!courseID) return res.status(400).json({ message: 'courseID is required' });
-    where.courseID = courseID;
+    if (courseID) where.courseID = courseID;
     if (stdId) where.stdId = stdId;
     if (status) where.status = status;
     if (date) {
@@ -189,7 +187,10 @@ router.get('/', async (req, res) => {
       limit,
       offset,
       attributes: ['attId','stdId','courseID','fingerprinthash','timestamp','latitude','longitude','valid','createdAt','updatedAt'],
-      include: [{ model: Student, attributes: ['stdId', 'name', 'email'] }]
+      include: [
+        { model: Student, attributes: ['stdId', 'name', 'email'] },
+        {model:Course,attributes :['courseID','title']},
+      ]
     });
 
     // map rows to include a flat student object for convenience
@@ -203,6 +204,14 @@ router.get('/', async (req, res) => {
           email: item.Student.email
         };
         delete item.Student;
+
+        if (item.Course) {
+    item.course = {
+      courseID: item.Course.courseID,
+      title: item.Course.title
+    };
+    delete item.Course;
+  }
       }
       return item;
     });
@@ -282,34 +291,79 @@ router.post('/manual', teacherAuth, async (req, res) => {
   }
 });
 
-// GET /attendance/analytics?courseID=1
-router.get('/analytics', async (req, res) => {
+// GET /attendance/stats/:teacherID?date=YYYY-MM-DD (teacher attendance statistics for a specific date)
+router.get('/stats/:teacherID', async (req, res) => {
   try {
-    const { courseID } = req.query;
-    if (!courseID) return res.status(400).json({ message: 'courseID is required' });
+    const { teacherID } = req.params;
+    const { date } = req.query;
 
-    const totalStudents = await Enrollment.count({ where: { courseID } });
+    if (!teacherID) {
+      return res.status(400).json({ message: 'teacherID is required' });
+    }
+    if (!date) {
+      return res.status(400).json({ message: 'date query parameter is required (format: YYYY-MM-DD)' });
+    }
 
-    // group by date
-    const rows = await sequelize.query(
-      `SELECT date(timestamp) as date,
-        SUM(CASE WHEN status='present' THEN 1 ELSE 0 END) as present,
-        SUM(CASE WHEN status!='present' THEN 1 ELSE 0 END) as absent
-       FROM Attendances
-       WHERE courseID = :courseID
-       GROUP BY date(timestamp)
-       ORDER BY date(timestamp) ASC`,
-      { replacements: { courseID }, type: sequelize.QueryTypes.SELECT }
-    );
+    // Get all courses taught by this teacher
+    const courses = await Course.findAll({
+      where: { instructorID: teacherID }
+    });
 
-    const totalPresent = rows.reduce((s, r) => s + (parseInt(r.present, 10) || 0), 0);
-    const days = rows.length || 1;
-    const totalExpected = totalStudents * days || 1;
-    const averageAttendance = Math.round((totalPresent / totalExpected) * 100);
+    if (courses.length === 0) {
+      return res.status(404).json({ message: 'No courses found for this teacher' });
+    }
 
-    const byDate = rows.map(r => ({ date: r.date, present: parseInt(r.present, 10) || 0, absent: parseInt(r.absent, 10) || 0 }));
+    const courseIDs = courses.map(c => c.courseID);
 
-    return res.json({ totalStudents, averageAttendance, byDate });
+    // Get total students enrolled in all these courses
+    const totalStudents = await Enrollment.count({
+      where: { courseID: { [Op.in]: courseIDs } },
+      distinct: true,
+      col: 'stdId'
+    });
+
+    // Get attendance records for these courses on the specified date
+    const attendanceRecords = await Attendance.findAll({
+      where: {
+        courseID: { [Op.in]: courseIDs },
+        timestamp: {
+          [Op.between]: [
+            new Date(date + 'T00:00:00Z'),
+            new Date(date + 'T23:59:59Z')
+          ]
+        }
+      }
+    });
+
+    // Count unique students present and absent on this date
+    const uniqueStudents = new Set();
+    let presentCount = 0;
+    let absentCount = 0;
+
+    for (const record of attendanceRecords) {
+      uniqueStudents.add(record.stdId);
+      if (record.status === 'present') {
+        presentCount++;
+      } else {
+        absentCount++;
+      }
+    }
+
+    // Calculate percentages
+    const presentPercentage = totalStudents > 0 ? parseFloat((presentCount / totalStudents * 100).toFixed(2)) : 0;
+    const absentPercentage = totalStudents > 0 ? parseFloat((absentCount / totalStudents * 100).toFixed(2)) : 0;
+
+    return res.json({
+      teacherID: parseInt(teacherID, 10),
+      date,
+      stats: {
+        totalStudents,
+        present: presentCount,
+        absent: absentCount,
+        presentPercentage,
+        absentPercentage
+      }
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Server error' });
