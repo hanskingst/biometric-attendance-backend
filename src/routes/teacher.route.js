@@ -59,7 +59,7 @@ router.post("/login", async (req, res) => {
 
     if (storedPassword === password) {
          const { password: _, ...teacherData } = teacher.toJSON();
-      return res.json({ message: "Login successful", student: teacherData });
+      return res.json({ message: "Login successful", teacher: teacherData });
     } else {
       return res.status(401).json({ message: "Incorrect password" });
     }
