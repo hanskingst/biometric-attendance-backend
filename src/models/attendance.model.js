@@ -21,6 +21,10 @@ const Attendance = sequelize.define("Attendance", {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  sessionId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
   timestamp:{
     type:DataTypes.DATE,
     allowNull:false,

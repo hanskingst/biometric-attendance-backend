@@ -5,6 +5,7 @@ import Course from "./course.model.js";
 import Attendance from "./attendance.model.js";
 import Enrollment from "./enrollment.model.js";
 import CourseLocation from "./courseLocation.model.js";
+import AttendanceSession from "./attendanceSession.model.js";
 
 const syncDB = async () => {
   try {
@@ -33,4 +34,4 @@ const syncDB = async () => {
   }
 };
 
-export { syncDB, Student, Teacher, Course, Enrollment, Attendance, CourseLocation };
+export { syncDB, Student, Teacher, Course, Enrollment, Attendance, CourseLocation, AttendanceSession };

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { Op } from "sequelize";
 import teacherAuth from "../middleware/teacherAuth.js";
-import { Enrollment, Course, Attendance, CourseLocation, Student } from "../models/index.js";
+import { Enrollment, Course, Attendance, CourseLocation, Student, AttendanceSession } from "../models/index.js";
 
 const router = Router();
 
@@ -22,28 +22,41 @@ function calculateDistance(userLat, userLon, schoolLat, schoolLon) {
   return Math.sqrt(latMeters ** 2 + lonMeters ** 2);
 }
 
-router.post("/", async (req, res) => {
+// POST /attendance-sessions/:sessionID/attendance
+// Record attendance for a given session (session-aware)
+router.post('/attendance-sessions/:sessionID/attendance', async (req, res) => {
+  const { sessionID } = req.params;
   // Accept school coordinates from frontend: school_lat, school_lon (optional but recommended)
-  const { stdId, courseID, fingerprinthash, latitude, longitude, school_lat, school_lon } = req.body;
+  const { stdId, fingerprinthash, latitude, longitude, school_lat, school_lon } = req.body;
 
   try {
     const now = new Date();
-    const isEnrolled = await Enrollment.findOne({
-      where: { stdId, courseID }
-    });
 
+    // find session
+    const session = await AttendanceSession.findByPk(sessionID);
+    if (!session) return res.status(404).json({ message: 'Attendance session not found' });
+
+    // ensure session is open and within opened/closed times
+    if (session.status !== 'open') return res.status(400).json({ message: 'Attendance session is not open' });
+    if (new Date(session.openedAt) > now) return res.status(400).json({ message: 'Attendance session has not opened yet' });
+    if (session.closedAt && new Date(session.closedAt) < now) return res.status(400).json({ message: 'Attendance session is already closed' });
+
+    const courseID = session.courseID;
+
+    // check enrollment
+    const isEnrolled = await Enrollment.findOne({ where: { stdId, courseID } });
     if (!isEnrolled) {
-      return res.status(403).json({ message: "Student not enrolled in this course" });
+      return res.status(403).json({ message: 'Student not enrolled in this course' });
     }
 
     const course = await Course.findByPk(courseID);
     if (!course) {
-      return res.status(404).json({ message: "Course not found" });                                                                                                                                                                           
+      return res.status(404).json({ message: 'Course not found' });
     }
 
     // Location check (simple radius logic)
     if (!latitude || !longitude) {
-      return res.status(400).json({ message: "Location is required" });
+      return res.status(400).json({ message: 'Location is required' });
     }
 
     // Parse numeric values
@@ -52,7 +65,6 @@ router.post("/", async (req, res) => {
     if (Number.isNaN(userLat) || Number.isNaN(userLon)) {
       return res.status(400).json({ message: 'Invalid latitude/longitude' });
     }
-
     /* Location Strategy: Learn → Enforce
      
      PHASE 1 (< 5 samples): Learning phase
@@ -144,6 +156,7 @@ router.post("/", async (req, res) => {
       attendance = await Attendance.create({
         stdId,
         courseID,
+        sessionId: session.sessionId,
         fingerprinthash: fingerprinthash || null,
         latitude,
         longitude,
@@ -160,6 +173,7 @@ router.post("/", async (req, res) => {
     attendance = await Attendance.create({
       stdId,
       courseID,
+      sessionId: session.sessionId,
       fingerprinthash,
       latitude,
       longitude,
@@ -170,11 +184,144 @@ router.post("/", async (req, res) => {
       markedAt: now
     });
 
-    return res.json({ message: "Attendance recorded", attendance });
+    return res.json({ message: 'Attendance recorded', attendance });
 
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: "Server error" });
+  }
+});
+
+// POST /course/:courseID/attendance-sessions  (teacher creates/starts a session)
+router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, res) => {
+  try {
+    const { courseID } = req.params;
+    const teacherId = req.teacher.teacherId;
+    const { openedAt, closedAt, status = 'open', notes } = req.body;
+
+    // verify course exists and teacher owns it
+    const course = await Course.findByPk(courseID);
+    if (!course) return res.status(404).json({ message: 'Course not found' });
+    if (parseInt(course.instructorID, 10) !== parseInt(teacherId, 10)) return res.status(403).json({ message: 'Teacher does not own this course' });
+
+    const now = new Date();
+    const opened = openedAt ? new Date(openedAt) : now;
+    const closed = closedAt ? new Date(closedAt) : null;
+
+    // create session
+    const session = await AttendanceSession.create({
+      courseID: parseInt(courseID, 10),
+      teacherId: parseInt(teacherId, 10),
+      openedAt: opened,
+      closedAt: closed,
+      status: status === 'open' ? 'open' : 'closed',
+      notes: notes || null
+    });
+
+    return res.status(201).json({ message: 'Attendance session created', session });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// GET /course/:courseID/attendance-sessions/open  (is there an active session?)
+router.get('/course/:courseID/attendance-sessions/open', async (req, res) => {
+  try {
+    const { courseID } = req.params;
+    const now = new Date();
+    const session = await AttendanceSession.findOne({
+      where: {
+        courseID,
+        status: 'open'
+      },
+      order: [['openedAt', 'DESC']]
+    });
+
+    if (!session) return res.json({ active: false });
+
+    // ensure time bounds
+    if (new Date(session.openedAt) > now) return res.json({ active: false });
+    if (session.closedAt && new Date(session.closedAt) < now) return res.json({ active: false });
+
+    return res.json({ active: true, session });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// GET /course/:courseID/attendance-sessions  (teacher lists sessions for a course)
+router.get('/course/:courseID/attendance-sessions', teacherAuth, async (req, res) => {
+  try {
+    const { courseID } = req.params;
+    const teacherId = req.teacher.teacherId;
+    const { page: pageStr = '1', limit: limitStr = '50', status } = req.query;
+
+    // verify course exists and teacher owns it
+    const course = await Course.findByPk(courseID);
+    if (!course) return res.status(404).json({ message: 'Course not found' });
+    if (parseInt(course.instructorID, 10) !== parseInt(teacherId, 10)) return res.status(403).json({ message: 'Teacher does not own this course' });
+
+    let page = parseInt(pageStr, 10);
+    let limit = parseInt(limitStr, 10);
+    if (Number.isNaN(page) || page < 1) page = 1;
+    if (Number.isNaN(limit) || limit < 1 || limit > 200) limit = 50;
+    const offset = (page - 1) * limit;
+
+    const where = { courseID: parseInt(courseID, 10) };
+    if (status && ['open', 'closed'].includes(status)) where.status = status;
+
+    const { count, rows } = await AttendanceSession.findAndCountAll({
+      where,
+      order: [['openedAt', 'DESC']],
+      limit,
+      offset
+    });
+
+    return res.json({ data: rows, meta: { page, limit, total: count, totalPages: Math.ceil(count / limit) || 1 } });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// GET /attendance-sessions/:sessionID/attendance  (list attendance for a session)
+router.get('/attendance-sessions/:sessionID/attendance', async (req, res) => {
+  try {
+    const { sessionID } = req.params;
+    const { page: pageStr = '1', limit: limitStr = '50' } = req.query;
+    let page = parseInt(pageStr, 10);
+    let limit = parseInt(limitStr, 10);
+    if (Number.isNaN(page) || page < 1) page = 1;
+    if (Number.isNaN(limit) || limit < 1 || limit > 200) limit = 50;
+    const offset = (page - 1) * limit;
+
+    const { count, rows } = await Attendance.findAndCountAll({
+      where: { sessionId: sessionID },
+      order: [['timestamp', 'DESC']],
+      limit,
+      offset,
+      include: [ { model: Student, attributes: ['stdId','name','email'] }, { model: Course, attributes: ['courseID','title'] } ]
+    });
+
+    const data = rows.map(r => {
+      const item = r.toJSON ? r.toJSON() : r;
+      if (item.Student) {
+        item.student = { stdId: item.Student.stdId, name: item.Student.name, email: item.Student.email };
+        delete item.Student;
+      }
+      if (item.Course) {
+        item.course = { courseID: item.Course.courseID, title: item.Course.title };
+        delete item.Course;
+      }
+      return item;
+    });
+
+    return res.json({ data, meta: { page, limit, total: count, totalPages: Math.ceil(count / limit) || 1 } });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Server error' });
   }
 });
 

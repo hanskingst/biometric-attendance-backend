@@ -133,23 +133,297 @@ router.get('/', (req, res) => {
           </div>
         </div>
 
-        <h4 class="section-title">Attendance</h4>
+        <h4 class="section-title">Attendance Sessions (Session Management)</h4>
         <div class="card mb-3">
           <div class="card-body">
-            <p class="mb-1 endpoint"><strong>POST</strong> <code>/attendance</code></p>
-            <p class="text-muted">Student mobile sends location + fingerprint hash. Backend enforces course time window and validates school location.</p>
-            <pre>{ "stdId":1, "courseID":1, "fingerprinthash":"abc123def456", "latitude":"4.1533", "longitude":"9.2927" }</pre>
+            <p class="text-muted mb-3">The attendance system now uses sessions. Teachers create sessions to control when students can mark attendance. Students can only submit attendance to an active (open) session within its time window.</p>
 
-            <p class="text-muted">Response on biometric success (200):</p>
-            <pre>{ "message":"Attendance recorded", "attendance": { "attId":12, "stdId":1, "courseID":1, "fingerprinthash":"abc123def456", "latitude":"4.1533", "longitude":"9.2927", "timestamp":"2025-12-23T08:31:23Z", "valid":true, "status":"present", "markedBy":"biometric", "markedAt":"2025-12-23T08:31:23Z" } }</pre>
-
-            <p class="text-muted">Response on biometric failure - recorded as absent (200):</p>
-            <pre>{ "message":"Biometric failed - recorded as absent", "attendance": { "attId":13, "stdId":1, "courseID":1, "fingerprinthash":null, "latitude":"4.1533", "longitude":"9.2927", "timestamp":"2025-12-23T08:32:00Z", "valid":false, "status":"absent", "markedBy":"system", "markedAt":"2025-12-23T08:32:00Z" } }</pre>
+            <p class="mb-1 endpoint"><strong>POST</strong> <code>/attendance/course/:courseID/attendance-sessions</code></p>
+            <p class="text-muted">Teacher creates and opens a new attendance session for their course. Requires teacher authentication. The teacher must own the course.</p>
+            <p class="text-muted">Request JSON:</p>
+            <pre>{
+  "openedAt": "2025-12-23T08:30:00Z",  // optional, defaults to current time
+  "closedAt": "2025-12-23T09:30:00Z",  // optional, null for no end time
+  "status": "open",                     // optional, "open" or "closed", defaults to "open"
+  "notes": "Regular class session"      // optional, any teacher notes
+}</pre>
+            <p class="text-muted">Success response (201):</p>
+            <pre>{
+  "message": "Attendance session created",
+  "session": {
+    "sessionId": 1,
+    "courseID": 1,
+    "teacherId": 5,
+    "openedAt": "2025-12-23T08:30:00Z",
+    "closedAt": "2025-12-23T09:30:00Z",
+    "status": "open",
+    "notes": "Regular class session",
+    "createdAt": "2025-12-23T08:29:00Z",
+    "updatedAt": "2025-12-23T08:29:00Z"
+  }
+}</pre>
+            <p class="text-muted">Error responses:</p>
+            <ul class="small">
+              <li>404: Course not found</li>
+              <li>403: Teacher does not own this course</li>
+            </ul>
 
             <hr />
+            <p class="mb-1 endpoint"><strong>GET</strong> <code>/attendance/course/:courseID/attendance-sessions/open</code></p>
+            <p class="text-muted">Check if there is currently an active (open) attendance session for a course. Used by student apps to determine if they can submit attendance. No authentication required.</p>
+            <p class="text-muted">Response when active session exists and is within time bounds (200):</p>
+            <pre>{
+  "active": true,
+  "session": {
+    "sessionId": 1,
+    "courseID": 1,
+    "teacherId": 5,
+    "openedAt": "2025-12-23T08:30:00Z",
+    "closedAt": "2025-12-23T09:30:00Z",
+    "status": "open",
+    "notes": "Regular class session"
+  }
+}</pre>
+            <p class="text-muted">Response when no active session or session is outside time bounds (200):</p>
+            <pre>{ "active": false }</pre>
+
+            <hr />
+            <p class="mb-1 endpoint"><strong>GET</strong> <code>/attendance/course/:courseID/attendance-sessions</code></p>
+            <p class="text-muted">List all attendance sessions for a course with pagination and optional status filtering. Requires teacher authentication. Teacher must own the course.</p>
+            <p class="text-muted">Query parameters:</p>
+            <ul class="small">
+              <li><code>page</code> (optional, default: 1, min: 1)</li>
+              <li><code>limit</code> (optional, default: 50, min: 1, max: 200)</li>
+              <li><code>status</code> (optional, filter by "open" or "closed")</li>
+            </ul>
+            <p class="text-muted">Example: <code>GET /attendance/course/1/attendance-sessions?page=1&limit=20&status=open</code></p>
+            <p class="text-muted">Success response (200):</p>
+            <pre>{
+  "data": [
+    {
+      "sessionId": 2,
+      "courseID": 1,
+      "teacherId": 5,
+      "openedAt": "2025-12-24T08:30:00Z",
+      "closedAt": null,
+      "status": "open",
+      "notes": "Morning session",
+      "createdAt": "2025-12-24T08:29:00Z",
+      "updatedAt": "2025-12-24T08:29:00Z"
+    },
+    {
+      "sessionId": 1,
+      "courseID": 1,
+      "teacherId": 5,
+      "openedAt": "2025-12-23T08:30:00Z",
+      "closedAt": "2025-12-23T09:30:00Z",
+      "status": "closed",
+      "notes": "Regular class session",
+      "createdAt": "2025-12-23T08:29:00Z",
+      "updatedAt": "2025-12-23T09:30:00Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 20,
+    "total": 15,
+    "totalPages": 1
+  }
+}</pre>
+            <p class="text-muted">Error responses:</p>
+            <ul class="small">
+              <li>404: Course not found</li>
+              <li>403: Teacher does not own this course</li>
+            </ul>
+          </div>
+        </div>
+
+        <h4 class="section-title">Attendance (Student Submission)</h4>
+        <div class="card mb-3">
+          <div class="card-body">
+            <p class="mb-1 endpoint"><strong>POST</strong> <code>/attendance/attendance-sessions/:sessionID/attendance</code></p>
+            <p class="text-muted"><strong>Primary student attendance endpoint (session-aware):</strong> Students submit their attendance (location + biometric) to a specific open session. The session must exist, be open, and the current time must be within the session's time window.</p>
+            <p class="text-muted">Request JSON:</p>
+            <pre>{
+  "stdId": 1,
+  "fingerprinthash": "abc123def456",  // biometric hash from device, empty string if failed
+  "latitude": "4.1533",                // student's GPS latitude
+  "longitude": "9.2927",               // student's GPS longitude
+  "school_lat": "4.1533",              // optional but recommended - expected course location
+  "school_lon": "9.2927"               // optional but recommended
+}</pre>
+
+            <p class="text-muted mt-3">Validation flow and responses:</p>
+            <ul class="small">
+              <li><strong>Session validation:</strong>
+                <ul>
+                  <li>404 if session not found: <code>{ "message": "Attendance session not found" }</code></li>
+                  <li>400 if session not open: <code>{ "message": "Attendance session is not open" }</code></li>
+                  <li>400 if before openedAt: <code>{ "message": "Attendance session has not opened yet" }</code></li>
+                  <li>400 if after closedAt: <code>{ "message": "Attendance session is already closed" }</code></li>
+                </ul>
+              </li>
+              <li><strong>Enrollment validation:</strong>
+                <ul>
+                  <li>403 if not enrolled: <code>{ "message": "Student not enrolled in this course" }</code></li>
+                </ul>
+              </li>
+              <li><strong>Location validation:</strong>
+                <ul>
+                  <li>400 if location missing: <code>{ "message": "Location is required" }</code></li>
+                  <li>400 if invalid coordinates: <code>{ "message": "Invalid latitude/longitude" }</code></li>
+                  <li>400 if outside learned course radius (Phase 2, after 5+ samples): detailed error with distance</li>
+                </ul>
+              </li>
+              <li><strong>Biometric validation:</strong>
+                <ul>
+                  <li>If biometric failed (missing or < 5 chars): <strong>Does not reject</strong> - creates absent record marked by system</li>
+                  <li>If biometric succeeded: creates present record marked by biometric</li>
+                </ul>
+              </li>
+            </ul>
+
+            <p class="text-muted mt-3">Success response - biometric passed (200):</p>
+            <pre>{
+  "message": "Attendance recorded",
+  "attendance": {
+    "attId": 12,
+    "stdId": 1,
+    "courseID": 1,
+    "sessionId": 1,
+    "fingerprinthash": "abc123def456",
+    "latitude": "4.1533",
+    "longitude": "9.2927",
+    "timestamp": "2025-12-23T08:31:23.000Z",
+    "valid": true,
+    "status": "present",
+    "markedBy": "biometric",
+    "markedAt": "2025-12-23T08:31:23.000Z",
+    "teacherId": null,
+    "notes": null
+  }
+}</pre>
+
+            <p class="text-muted">Success response - biometric failed (200):</p>
+            <pre>{
+  "message": "Biometric failed - recorded as absent",
+  "attendance": {
+    "attId": 13,
+    "stdId": 1,
+    "courseID": 1,
+    "sessionId": 1,
+    "fingerprinthash": null,
+    "latitude": "4.1533",
+    "longitude": "9.2927",
+    "timestamp": "2025-12-23T08:32:00.000Z",
+    "valid": false,
+    "status": "absent",
+    "markedBy": "system",
+    "markedAt": "2025-12-23T08:32:00.000Z",
+    "teacherId": null,
+    "notes": null
+  }
+}</pre>
+
+            <p class="text-muted">Error response - location outside course radius (400, Phase 2 only):</p>
+            <pre>{
+  "message": "Your location is 250m away from the course location (100m allowed). Are you on campus?",
+  "distance": 250,
+  "allowed": 100,
+  "courseLocation": { "lat": 4.1533, "lon": 9.2927 },
+  "yourLocation": { "lat": 4.1556, "lon": 9.2950 }
+}</pre>
+
+            <hr />
+            <p class="mb-1 endpoint"><strong>GET</strong> <code>/attendance/attendance-sessions/:sessionID/attendance</code></p>
+            <p class="text-muted">List all attendance records for a specific session. Returns student and course details. Supports pagination.</p>
+            <p class="text-muted">Query parameters:</p>
+            <ul class="small">
+              <li><code>page</code> (optional, default: 1)</li>
+              <li><code>limit</code> (optional, default: 50, max: 200)</li>
+            </ul>
+            <p class="text-muted">Success response (200):</p>
+            <pre>{
+  "data": [
+    {
+      "attId": 12,
+      "stdId": 1,
+      "courseID": 1,
+      "sessionId": 1,
+      "fingerprinthash": "abc123def456",
+      "timestamp": "2025-12-23T08:31:23Z",
+      "latitude": "4.1533",
+      "longitude": "9.2927",
+      "valid": true,
+      "status": "present",
+      "markedBy": "biometric",
+      "markedAt": "2025-12-23T08:31:23Z",
+      "teacherId": null,
+      "notes": null,
+      "createdAt": "2025-12-23T08:31:23Z",
+      "updatedAt": "2025-12-23T08:31:23Z",
+      "student": {
+        "stdId": 1,
+        "name": "Alice Johnson",
+        "email": "alice@example.com"
+      },
+      "course": {
+        "courseID": 1,
+        "title": "Math 101"
+      }
+    },
+    {
+      "attId": 13,
+      "stdId": 2,
+      "courseID": 1,
+      "sessionId": 1,
+      "fingerprinthash": null,
+      "timestamp": "2025-12-23T08:32:15Z",
+      "latitude": "4.1534",
+      "longitude": "9.2928",
+      "valid": false,
+      "status": "absent",
+      "markedBy": "system",
+      "markedAt": "2025-12-23T08:32:15Z",
+      "teacherId": null,
+      "notes": null,
+      "createdAt": "2025-12-23T08:32:15Z",
+      "updatedAt": "2025-12-23T08:32:15Z",
+      "student": {
+        "stdId": 2,
+        "name": "Bob Smith",
+        "email": "bob@example.com"
+      },
+      "course": {
+        "courseID": 1,
+        "title": "Math 101"
+      }
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 50,
+    "total": 45,
+    "totalPages": 1
+  }
+}</pre>
+          </div>
+        </div>
+
+        <h4 class="section-title">Attendance (Legacy & Filtering)</h4>
+        <div class="card mb-3">
+          <div class="card-body">
             <p class="mb-1 endpoint"><strong>GET</strong> <code>/attendance?courseID=1&date=YYYY-MM-DD&page=1&limit=20&status=present&stdId=1</code></p>
-            <p class="text-muted">List attendance records for a course with optional filters. Required: <code>courseID</code>. Optional: <code>date</code> (YYYY-MM-DD), <code>status</code> (present/absent/manual), <code>stdId</code>, <code>page</code>, <code>limit</code>. Includes student object with name and email.</p>
-            <pre>{ "data": [ { "attId":12, "stdId":1, "courseID":1, "fingerprinthash":"abc123", "timestamp":"2025-12-23T08:31:23Z", "latitude":"4.1533", "longitude":"9.2927", "valid":true, "createdAt":"2025-12-23T08:31:23Z", "updatedAt":"2025-12-23T08:31:23Z", "student": { "stdId":1, "name":"Alice", "email":"alice@example.com" } } ], "meta": { "page":1, "limit":20, "total":120, "totalPages":6 } }</pre>
+            <p class="text-muted">List attendance records for a course with optional filters. All filters are optional. Includes student object with name and email.</p>
+            <p class="text-muted">Query parameters:</p>
+            <ul class="small">
+              <li><code>courseID</code> (optional, numeric filter)</li>
+              <li><code>date</code> (optional, format: YYYY-MM-DD)</li>
+              <li><code>stdId</code> (optional, numeric filter)</li>
+              <li><code>status</code> (optional: present/absent/manual)</li>
+              <li><code>page</code>, <code>limit</code> (optional pagination)</li>
+            </ul>
+            <pre>{ "data": [ { "attId":12, "stdId":1, "courseID":1, "fingerprinthash":"abc123", "timestamp":"2025-12-23T08:31:23Z", "latitude":"4.1533", "longitude":"9.2927", "valid":true, "createdAt":"2025-12-23T08:31:23Z", "updatedAt":"2025-12-23T08:31:23Z", "student": { "stdId":1, "name":"Alice", "email":"alice@example.com" }, "course": { "courseID":1, "title":"Math 101" } } ], "meta": { "page":1, "limit":20, "total":120, "totalPages":6 } }</pre>
 
             <hr />
             <p class="mb-1 endpoint"><strong>GET</strong> <code>/attendance/stats/:teacherID?date=YYYY-MM-DD</code></p>
@@ -169,93 +443,77 @@ router.get('/', (req, res) => {
             <pre>{ "message": "Attendance marked manually", "attendance": { "attId":14, "stdId":3, "courseID":1, "fingerprinthash":null, "latitude":null, "longitude":null, "timestamp":"2025-12-23T08:45:00Z", "valid":false, "status":"manual", "markedBy":"teacher", "teacherId":5, "markedAt":"2025-12-23T08:45:00Z", "notes":"Fingerprint sensor malfunction" } }</pre>
             <p class="text-muted">Response (200) - updated existing attendance on same day:</p>
             <pre>{ "message": "Attendance updated (manual)", "attendance": { "attId":13, "stdId":3, "courseID":1, "status":"manual", "markedBy":"teacher", "teacherId":5, "markedAt":"2025-12-23T08:45:00Z", "notes":"Fingerprint sensor malfunction" } }</pre>
+
+            <hr />
+            <p class="mb-1 endpoint"><strong>DELETE</strong> <code>/attendance/:attId</code> (Teacher Auth Required)</p>
+            <p class="text-muted">Delete an attendance record. Teacher must own the course that the attendance belongs to. Returns the deleted record ID.</p>
+            <p class="text-muted">Success response (200):</p>
+            <pre>{ "message": "Attendance record deleted successfully", "attId": 14 }</pre>
+            <p class="text-muted">Error responses:</p>
+            <ul class="small">
+              <li>400: attId is required</li>
+              <li>404: Attendance record not found</li>
+              <li>404: Course not found</li>
+              <li>403: You can only delete attendance from your own courses</li>
+            </ul>
           </div>
         </div>
 
-        <h4 class="section-title">Admin (dashboard & management)</h4>
-        <div class="card mb-4">
+        <h4 class="section-title">Location Learning System</h4>
+        <div class="card mb-3">
           <div class="card-body">
-            <p class="text-muted">Admin endpoints for viewing statistics, managing entities (students, teachers, courses), and system administration. Requires admin authentication (Basic Auth with admin credentials or session cookie).</p>
-            <p class="mb-1 endpoint"><strong>GET</strong> <code>/admin/stats</code></p>
-            <p class="text-muted">Get system-wide statistics including total requests, students, teachers, and courses.</p>
-            <pre>{ "requests": 1234, "students": 42, "teachers": 3, "courses": 10 }</pre>
+            <h6>How Course Location Validation Works</h6>
+            <p class="text-muted">The system uses a two-phase adaptive learning approach to balance security with flexibility:</p>
+            
+            <p class="text-muted mt-2"><strong>Phase 1: Learning Mode (< 5 samples)</strong></p>
+            <ul class="small">
+              <li>Accepts any GPS location from students marking attendance</li>
+              <li>Collects and stores location coordinates to learn where the course actually takes place</li>
+              <li>No location-based rejections during this phase</li>
+              <li>Ideal for new courses or courses in varying locations</li>
+            </ul>
 
-            <hr />
-            <p class="mb-1 endpoint"><strong>DELETE</strong> <code>/admin/students/:id</code></p>
-            <p class="text-muted">Delete a student account. Cascades to remove all related enrollments and attendance records. Requires admin authentication.</p>
-            <pre>Example: curl -X DELETE -u johnnystock@gmail.com:Jesus12@# http://{host}/admin/students/1
-Response (200): { "message": "Student deleted successfully" }</pre>
+            <p class="text-muted mt-2"><strong>Phase 2: Enforcement Mode (>= 5 samples)</strong></p>
+            <ul class="small">
+              <li>System calculates average location from the first 5+ attendance submissions</li>
+              <li>Creates a CourseLocation record with the inferred coordinates</li>
+              <li>All future attendance submissions must be within 100 meters of this learned location</li>
+              <li>Submissions outside the radius are rejected with a detailed error message showing:
+                              <ul>
+                  <li>Distance from expected course location</li>
+                  <li>Allowed radius (default: 100 meters)</li>
+                  <li>Expected course coordinates</li>
+                  <li>Student's submitted coordinates</li>
+                </ul>
+            </ul>
 
-            <hr />
-            <p class="text-muted"><strong>Note:</strong> Admin credentials (development/demo): <code>johnnystock@gmail.com / Jesus12@#</code></p>
+            <p class="text-muted mt-3">
+              This approach prevents early false rejections while gradually enforcing strict
+              on-campus attendance as reliable data becomes available.
+            </p>
           </div>
         </div>
 
-          <h4 class="section-title">HTTP Status Codes</h4>
-          <div class="card mb-3">
-            <div class="card-body">
-              <ul>
-                <li><strong>200 OK:</strong> Successful GET/POST/PUT request</li>
-                <li><strong>201 Created:</strong> Resource successfully created (POST requests)</li>
-                <li><strong>400 Bad Request:</strong> Missing or invalid request parameters</li>
-                <li><strong>403 Forbidden:</strong> Insufficient permissions (e.g., teacher accessing another teacher's course)</li>
-                <li><strong>404 Not Found:</strong> Resource does not exist</li>
-                <li><strong>500 Server Error:</strong> Internal server error</li>
-              </ul>
-            </div>
+        <h4 class="section-title">Health & Utilities</h4>
+        <div class="card mb-3">
+          <div class="card-body">
+            <p class="mb-1 endpoint"><strong>GET</strong> <code>/health</code></p>
+            <p class="text-muted">
+              Lightweight health check endpoint. Returns server status and timestamp.
+            </p>
+            <pre>{ "status": "ok", "timestamp": "2025-12-23T08:30:00Z" }</pre>
           </div>
+        </div>
 
-          <h4 class="section-title">Important Notes & Best Practices</h4>
-          <div class="card mb-4">
-            <div class="card-body">
-              <h6>Authentication</h6>
-              <ul>
-                <li>Student/Teacher login endpoints return user data in response (no token); store credentials securely on client side</li>
-                <li>Teacher endpoints for manual attendance marking require teacher authentication via middleware</li>
-                <li>Admin endpoints require Basic Auth with admin email/password credentials</li>
-              </ul>
+        <footer class="text-center text-muted small mt-4">
+          <hr />
+          <p>
+            Biometric Attendance System — API Documentation<br/>
+            Session-based attendance is the recommended approach for all new clients.
+          </p>
+        </footer>
 
-              <h6 class="mt-3">Attendance Marking</h6>
-              <ul>
-                <li>Students can only submit attendance during their course's scheduled time window (between <code>startTime</code> and <code>endTime</code>)</li>
-                <li>Biometric validation requires a fingerprint hash of at least 5 characters; failures are recorded as "absent" by system</li>
-                <li>Location validation checks if student is within ~100 meters of the learned school location or default coordinates</li>
-                <li>Teachers can manually override attendance using <code>POST /attendance/manual</code> if biometric fails or issues occur</li>
-              </ul>
-
-              <h6 class="mt-3">Enrollment</h6>
-              <ul>
-                <li>Students must be enrolled in a course before they can mark attendance</li>
-                <li>Use <code>GET /enrollments/course/:courseID</code> to see all students in a course</li>
-                <li>Use <code>GET /enrollments/student/:stdId</code> to see all courses a student is taking</li>
-              </ul>
-
-              <h6 class="mt-3">Pagination</h6>
-              <ul>
-                <li>Default page size is 20 records; adjust with <code>limit</code> parameter</li>
-                <li>Always check <code>meta.totalPages</code> to determine if more results exist</li>
-                <li>Pages are 1-indexed (start from page 1, not 0)</li>
-              </ul>
-
-              <h6 class="mt-3">Course Management</h6>
-              <ul>
-                <li>Courses belong to teachers (instructorID field links to teacher)</li>
-                <li>Use <code>GET /courses?teacherID=X</code> to list courses taught by a specific teacher</li>
-                <li>School location is inferred from the first 5 attendance submissions per course if not explicitly set</li>
-              </ul>
-
-              <h6 class="mt-3">Analytics & Reporting</h6>
-              <ul>
-                <li><code>GET /attendance/stats/:teacherID?date=YYYY-MM-DD</code> provides daily attendance summary across all teacher's courses</li>
-                <li><code>GET /attendance/failed?courseID=X</code> lists students with failed biometric attempts for a course</li>
-                <li>Both endpoints support optional date filtering in YYYY-MM-DD format</li>
-              </ul>
-            </div>
-          </div>
-
-        <footer class="text-muted small">If you want a machine-readable spec (OpenAPI) or interactive docs (Swagger UI) I can add that — it's the recommended approach for frontend-first development.</footer>
       </div>
-      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     </body>
   </html>`;
 
@@ -264,4 +522,3 @@ Response (200): { "message": "Student deleted successfully" }</pre>
 });
 
 export default router;
-
