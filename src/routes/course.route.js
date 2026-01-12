@@ -1,22 +1,27 @@
 import { Router } from "express";
 import { Course } from "../models/index.js";
+import teacherAuth from "../middleware/teacherAuth.js";
 
 const router = Router()
 
-// Create a new course
-router.post('/course',async (req,res)=>{
 
-        const {title,startTime,endTime,instructorID} = req.body;
-        try {
+// POST /courses/course  
 
-                const course = await Course.create({title,startTime,endTime,instructorID});
-                res.status(201).json({message:"course registered successfully",course});
-        
-        } catch (error) {
-                    console.error(error);
-                    res.status(500).json({ message: "Server error" });
-        }
+router.post('/course', teacherAuth, async (req, res) => {
+  const { title, startTime, endTime } = req.body;
+  const instructorID = req.teacher.teacherId; 
 
+  if (!title || !startTime || !endTime) {
+    return res.status(400).json({ message: 'title, startTime, and endTime are required' });
+  }
+
+  try {
+    const course = await Course.create({ title, startTime, endTime, instructorID });
+    res.status(201).json({ message: "course registered successfully", course });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
 });
 
 // Get all courses (with pagination) or courses for a specific teacher
