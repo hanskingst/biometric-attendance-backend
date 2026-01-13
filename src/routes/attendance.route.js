@@ -535,7 +535,7 @@ router.get('/stats/:teacherID', async (req, res) => {
       }
     }
 
-    // Calculate percentages
+    // Calculate percentages like for all yeah
     const presentPercentage = totalStudents > 0 ? parseFloat((presentCount / totalStudents * 100).toFixed(2)) : 0;
     const absentPercentage = totalStudents > 0 ? parseFloat((absentCount / totalStudents * 100).toFixed(2)) : 0;
 
