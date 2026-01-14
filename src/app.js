@@ -7,7 +7,8 @@ const app = express();
 
 // CORS configuration
 const allowedOrigins = [
-	'http://localhost:5173',  
+	'http://localhost:5173', 
+	'https://biomtric-web.vercel.app', 
 	process.env.FRONTEND_URL || '' 
 ].filter(origin => origin); 
 
