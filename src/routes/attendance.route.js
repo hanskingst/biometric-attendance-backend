@@ -49,6 +49,24 @@ router.post('/attendance-sessions/:sessionID/attendance', async (req, res) => {
       return res.status(403).json({ message: 'Student not enrolled in this course' });
     }
 
+    // ────────────────────────────────────────────────────────────────
+    // NEW: Prevent duplicate attendance for the same student + session
+    // ────────────────────────────────────────────────────────────────
+    const existing = await Attendance.findOne({
+      where: {
+        stdId,
+        sessionId: session.sessionId 
+      }
+    });
+
+    if (existing) {
+      return res.status(409).json({
+        message: 'You have already recorded attendance for this session',
+        alreadyRecordedAt: existing.timestamp,
+        currentStatus: existing.status
+      });
+    }
+
     const course = await Course.findByPk(courseID);
     if (!course) {
       return res.status(404).json({ message: 'Course not found' });
@@ -151,8 +169,9 @@ router.post('/attendance-sessions/:sessionID/attendance', async (req, res) => {
 
     //Fingerprint presence check (simple mock)
     let attendance;
+
     if (!fingerprinthash || fingerprinthash.length < 5) {
-      // Biometric failed: record absent marked by system (do not reject)
+      // Biometric failed → record as absent
       attendance = await Attendance.create({
         stdId,
         courseID,
@@ -169,7 +188,7 @@ router.post('/attendance-sessions/:sessionID/attendance', async (req, res) => {
       return res.json({ message: 'Biometric failed - recorded as absent', attendance });
     }
 
-    // Biometric succeeded
+    // Biometric success
     attendance = await Attendance.create({
       stdId,
       courseID,
@@ -202,11 +221,27 @@ router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, re
     // verify course exists and teacher owns it
     const course = await Course.findByPk(courseID);
     if (!course) return res.status(404).json({ message: 'Course not found' });
-    if (parseInt(course.instructorID, 10) !== parseInt(teacherId, 10)) return res.status(403).json({ message: 'Teacher does not own this course' });
+    if (parseInt(course.instructorID, 10) !== parseInt(teacherId, 10)) {
+      return res.status(403).json({ message: 'Teacher does not own this course' });
+    }
 
     const now = new Date();
     const opened = openedAt ? new Date(openedAt) : now;
     const closed = closedAt ? new Date(closedAt) : null;
+
+    // Validation against course times
+    const courseStart = new Date(course.startTime);
+    const courseEnd = new Date(course.endTime);
+
+    if (opened < courseStart) {
+      return res.status(400).json({ message: 'Session start time must be >= course start time' });
+    }
+    if (closed && closed > courseEnd) {
+      return res.status(400).json({ message: 'Session end time must be <= course end time' });
+    }
+    if (closed && closed < opened) {
+      return res.status(400).json({ message: 'Session end time must be after start time' });
+    }
 
     // create session
     const session = await AttendanceSession.create({
@@ -224,6 +259,7 @@ router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, re
     return res.status(500).json({ message: 'Server error' });
   }
 });
+
 
 // GET /course/:courseID/attendance-sessions/open  (is there an active session?)
 router.get('/course/:courseID/attendance-sessions/open', async (req, res) => {
@@ -244,7 +280,16 @@ router.get('/course/:courseID/attendance-sessions/open', async (req, res) => {
     if (new Date(session.openedAt) > now) return res.json({ active: false });
     if (session.closedAt && new Date(session.closedAt) < now) return res.json({ active: false });
 
-    return res.json({ active: true, session });
+    return res.json({ 
+      active: true, 
+      sessionId: session.sessionId, 
+      courseID: session.courseID, 
+      teacherId: session.teacherId, 
+      openedAt: session.openedAt, 
+      closedAt: session.closedAt, 
+      status: session.status, 
+      notes: session.note
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Server error' });

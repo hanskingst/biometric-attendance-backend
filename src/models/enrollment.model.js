@@ -12,7 +12,7 @@ const Enrollment = sequelize.define("Enrollment", {
 });
 
 // Relationships: Many-to-Many Student  Course
-Student.belongsToMany(Course, { through: Enrollment, foreignKey: "stdId" });
-Course.belongsToMany(Student, { through: Enrollment, foreignKey: "courseID" });
+Student.belongsToMany(Course, { through: Enrollment, foreignKey: "stdId",onDelete: "CASCADE", onUpdate: "CASCADE", });
+Course.belongsToMany(Student, { through: Enrollment, foreignKey: "courseID",onDelete: "CASCADE", onUpdate: "CASCADE", });
 
 export default Enrollment;

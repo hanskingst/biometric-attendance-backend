@@ -37,14 +37,14 @@ const AttendanceSession = sequelize.define("AttendanceSession", {
 });
 
 // Associations
-AttendanceSession.belongsTo(Course, { foreignKey: "courseID" });
-Course.hasMany(AttendanceSession, { foreignKey: "courseID" });
+AttendanceSession.belongsTo(Course, { foreignKey: "courseID",onDelete: "CASCADE", onUpdate: "CASCADE", });
+Course.hasMany(AttendanceSession, { foreignKey: "courseID",onDelete: "CASCADE", onUpdate: "CASCADE", });
 
-AttendanceSession.belongsTo(Teacher, { foreignKey: "teacherId" });
-Teacher.hasMany(AttendanceSession, { foreignKey: "teacherId" });
+AttendanceSession.belongsTo(Teacher, { foreignKey: "teacherId",onDelete: "CASCADE", onUpdate: "CASCADE", });
+Teacher.hasMany(AttendanceSession, { foreignKey: "teacherId",onDelete: "CASCADE", onUpdate: "CASCADE", });
 
 // Link sessions to attendance records
-Attendance.belongsTo(AttendanceSession, { foreignKey: "sessionId" });
-AttendanceSession.hasMany(Attendance, { foreignKey: "sessionId" });
+Attendance.belongsTo(AttendanceSession, { foreignKey: "sessionId",onDelete: "CASCADE", onUpdate: "CASCADE",});
+AttendanceSession.hasMany(Attendance, { foreignKey: "sessionId",onDelete: "CASCADE", onUpdate: "CASCADE", });
 
 export default AttendanceSession;

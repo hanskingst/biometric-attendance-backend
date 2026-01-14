@@ -26,7 +26,7 @@ const Course = sequelize.define("Course", {
 });
 
 // relationships between course and teacher
-Course.belongsTo(Teacher,{foreignKey:"instructorID"});
-Teacher.hasMany(Course,{foreignKey:"instructorID"});
+Course.belongsTo(Teacher,{foreignKey:"instructorID",onDelete:"CASCADE",onUpdate:"CASCADE",});
+Teacher.hasMany(Course,{foreignKey:"instructorID",onDelete:"CASCADE",onUpdate:"CASCADE"});
 
 export default Course;

@@ -1,5 +1,6 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/database.js";
+import Course from "./course.model.js";
 
 const CourseLocation = sequelize.define("CourseLocation", {
   id: {
@@ -25,5 +26,17 @@ const CourseLocation = sequelize.define("CourseLocation", {
     defaultValue: 0,
   },
 });
+
+CourseLocation.belongsTo(Course, {
+  foreignKey: "courseID",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+Course.hasOne(CourseLocation, {
+  foreignKey: "courseID",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
 
 export default CourseLocation;

@@ -65,10 +65,10 @@ const Attendance = sequelize.define("Attendance", {
 });
 
 // Relationships: Attendance belongs to Student and Course
-Attendance.belongsTo(Student, { foreignKey: "stdId" });
-Student.hasMany(Attendance, { foreignKey: "stdId" });
+Attendance.belongsTo(Student, { foreignKey: "stdId",onDelete: "CASCADE", onUpdate: "CASCADE", });
+Student.hasMany(Attendance, { foreignKey: "stdId",onDelete: "CASCADE", onUpdate: "CASCADE", });
 
-Attendance.belongsTo(Course, { foreignKey: "courseID" });
-Course.hasMany(Attendance, { foreignKey: "courseID" });
+Attendance.belongsTo(Course, { foreignKey: "courseID",onDelete: "CASCADE", onUpdate: "CASCADE", });
+Course.hasMany(Attendance, { foreignKey: "courseID",onDelete: "CASCADE", onUpdate: "CASCADE", });
 
 export default Attendance;

@@ -84,19 +84,18 @@ router.get('/stats', requireAdmin, async (req, res) => {
   }
 });
 
-// Admin deletes
-// Delete student (cascades enrollments and attendance)
+// Admin deletes student
 router.delete('/students/:id', requireAdmin, async (req, res) => {
   const id = req.params.id;
   try {
     const student = await Student.findByPk(id);
-    if(!student) return res.status(404).json({ message: 'Student not found' });
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
 
-    // delete related attendance and enrollments
-    await Attendance.destroy({ where: { stdId: id } });
-    await Enrollment.destroy({ where: { stdId: id } });
-
+    // Cascade will handle enrollments + attendance
     await student.destroy();
+
     return res.json({ message: 'Student deleted' });
   } catch (error) {
     console.error(error);
@@ -104,17 +103,24 @@ router.delete('/students/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// Delete teacher (prevent if teacher has courses)
+
+// Admin deletes teacher
 router.delete('/teachers/:id', requireAdmin, async (req, res) => {
   const id = req.params.id;
   try {
     const teacher = await Teacher.findByPk(id);
-    if(!teacher) return res.status(404).json({ message: 'Teacher not found' });
+    if (!teacher) {
+      return res.status(404).json({ message: 'Teacher not found' });
+    }
 
     const courses = await Course.findAll({ where: { instructorID: id } });
-    if(courses.length > 0) return res.status(400).json({ message: 'Teacher has courses. Remove or reassign courses before deleting teacher.' });
+    if (courses.length > 0) {
+      return res.status(400).json({ message: 'Teacher has courses. Remove or reassign courses before deleting teacher.' });
+    }
 
+    // Cascade will handle sessions, attendance, etc.
     await teacher.destroy();
+
     return res.json({ message: 'Teacher deleted' });
   } catch (error) {
     console.error(error);
@@ -122,23 +128,26 @@ router.delete('/teachers/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// Delete course (cascades enrollments and attendance)
+
+// Admin deletes course
 router.delete('/courses/:id', requireAdmin, async (req, res) => {
   const id = req.params.id;
   try {
     const course = await Course.findByPk(id);
-    if(!course) return res.status(404).json({ message: 'Course not found' });
+    if (!course) {
+      return res.status(404).json({ message: 'Course not found' });
+    }
 
-    await Attendance.destroy({ where: { courseID: id } });
-    await Enrollment.destroy({ where: { courseID: id } });
-
+    // Cascade will handle enrollments, attendance, sessions, location
     await course.destroy();
+
     return res.json({ message: 'Course deleted' });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: 'Server error' });
   }
 });
+
 
 // Styled dashboard (protected)
 router.get('/dashboard', requireAdmin, async (req, res) => {
@@ -157,180 +166,368 @@ router.get('/dashboard', requireAdmin, async (req, res) => {
     });
 
     const html = `<!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <title>Admin Dashboard</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-        <style>
-          :root{--bg:#f4f7fb;--card:#ffffff;--accent:#0d6efd}
-          body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);padding:24px}
-          .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
-          .card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
-          .stat-card{background:var(--card);padding:18px;border-radius:12px;box-shadow:0 6px 18px rgba(13,38,76,0.06)}
-          .table-wrap{background:var(--card);padding:16px;border-radius:12px;box-shadow:0 6px 18px rgba(13,38,76,0.04);margin-top:18px}
-          .logout-btn{margin-left:12px}
-          pre{background:#0b1220;color:#dbeafe;padding:12px;border-radius:8px;overflow:auto}
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+  <title>Admin Dashboard</title>
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-          /* Responsive tweaks */
-          @media (max-width: 768px) {
-            body{padding:14px}
-            .topbar{flex-direction:column;align-items:flex-start;gap:8px}
-            .logout-btn{margin-left:0}
-            .card-grid{grid-template-columns:1fr}
-            .stat-card{padding:14px}
-            .table-wrap{padding:12px}
-            .stat-card h2{font-size:1.6rem}
-          }
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+      --shadow-sm: 0 2px 8px rgba(0,0,0,0.05);
+    }
 
-          @media (max-width: 480px) {
-            .topbar h1{font-size:1.05rem}
-            .stat-card h2{font-size:1.4rem}
-            .table-wrap table td, .table-wrap table th{white-space:normal;word-break:break-word;font-size:0.9rem}
-            .table-wrap .btn{width:100%;font-size:0.85rem;padding:6px 8px}
-            pre{font-size:0.85rem}
-          }
-        </style>
-      </head>
-      <body>
-        <div class="topbar">
-          <div>
-            <h1 class="h4">Biometric App — Admin</h1>
-            <small class="text-muted">Overview & live stats</small>
-          </div>
-          <div>
-            <a class="btn btn-outline-secondary" href="/">Home</a>
-            <a class="btn btn-danger logout-btn" href="/admin/logout">Sign out</a>
-          </div>
-        </div>
+    * { box-sizing: border-box; }
 
-        <div class="card-grid">
-          <div class="stat-card">
-            <h6 class="text-muted">Total Requests</h6>
-            <h2>${counters.total}</h2>
-            <small class="text-muted">By endpoint:</small>
-            <pre>${JSON.stringify(counters.byEndpoint, null, 2)}</pre>
-          </div>
-          <div class="stat-card">
-            <h6 class="text-muted">Students</h6>
-            <h2>${students.length}</h2>
-            <p class="text-muted mb-0">Total registered students</p>
-          </div>
-          <div class="stat-card">
-            <h6 class="text-muted">Teachers</h6>
-            <h2>${teachers.length}</h2>
-            <p class="text-muted mb-0">Total registered teachers</p>
-          </div>
-          <div class="stat-card">
-            <h6 class="text-muted">Courses</h6>
-            <h2>${courses.length}</h2>
-            <p class="text-muted mb-0">Active courses</p>
-          </div>
-        </div>
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 1rem;
+      min-height: 100vh;
+    }
 
-        <div class="table-wrap mt-4">
-          <h5>Students</h5>
-          <div class="table-responsive">
-            <table class="table table-hover">
-              <thead><tr><th>ID</th><th>Name</th><th>Email</th></tr></thead>
-              <tbody>
-                ${students.map(s => `<tr data-id="${s.stdId}"><td>${s.stdId}</td><td>${s.name}</td><td>${s.email}</td><td><button class="btn btn-sm btn-danger delete-student">Delete</button></td></tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1.75rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
 
-        <div class="table-wrap mt-4">
-          <h5>Teachers</h5>
-          <div class="table-responsive">
-            <table class="table table-hover">
-              <thead><tr><th>ID</th><th>Name</th><th>Email</th></tr></thead>
-              <tbody>
-                ${teachers.map(t => `<tr data-id="${t.teacherId}"><td>${t.teacherId}</td><td>${t.name}</td><td>${t.email}</td><td><button class="btn btn-sm btn-danger delete-teacher">Delete</button></td></tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
+    .topbar h1 {
+      margin: 0;
+      font-size: clamp(1.35rem, 5vw, 1.75rem);
+      font-weight: 700;
+    }
 
-        <div class="table-wrap mt-4">
-          <h5>Courses</h5>
-          <div class="table-responsive">
-            <table class="table table-hover">
-              <thead><tr><th>ID</th><th>Title</th><th>Start</th><th>End</th><th>InstructorID</th></tr></thead>
-              <tbody>
-                ${courses.map(c => `<tr data-id="${c.courseID}"><td>${c.courseID}</td><td>${c.title}</td><td>${new Date(c.startTime).toLocaleString()}</td><td>${new Date(c.endTime).toLocaleString()}</td><td>${c.instructorID}</td><td><button class="btn btn-sm btn-danger delete-course">Delete</button></td></tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
 
-        <div class="table-wrap mt-4">
-          <h5>Attendance Records (Latest 50)</h5>
-          <div class="table-responsive">
-            <table class="table table-hover">
-              <thead><tr><th>ID</th><th>Student</th><th>Course</th><th>Status</th><th>Timestamp</th><th>Marked By</th><th>Action</th></tr></thead>
-              <tbody>
-                ${attendances.map(a => {
-                  const att = a.toJSON ? a.toJSON() : a;
-                  return `<tr data-id="${att.attId}">
-                    <td>${att.attId}</td>
-                    <td>${att.Student?.name || 'N/A'} (${att.stdId})</td>
-                    <td>${att.Course?.title || 'N/A'} (${att.courseID})</td>
-                    <td><span class="badge ${att.status === 'present' ? 'bg-success' : att.status === 'absent' ? 'bg-danger' : 'bg-warning'}">${att.status}</span></td>
-                    <td>${new Date(att.timestamp).toLocaleString()}</td>
-                    <td>${att.markedBy || 'N/A'}</td>
-                    <td><button class="btn btn-sm btn-danger delete-attendance">Delete</button></td>
-                  </tr>`;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
+    .stat-card {
+      background: var(--card-bg);
+      border-radius: 10px;
+      padding: 1.5rem;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+    }
 
-        <script>
-          // helper to send DELETE and update UI
-          async function sendDelete(url){
-            if(!confirm('Are you sure you want to delete this item?')) return null;
-            const res = await fetch(url, { method: 'DELETE', credentials: 'same-origin' });
-            if(!res.ok){
-              const body = await res.text();
-              alert('Delete failed: ' + res.status + ' ' + body);
-              return null;
-            }
-            return await res.json().catch(()=>({}));
-          }
+    .stat-card h6 {
+      color: var(--muted);
+      font-size: 0.875rem;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+    }
 
-          document.addEventListener('click', async (e) => {
-            if(e.target.matches('.delete-student')){
-              const row = e.target.closest('tr');
-              const id = row.getAttribute('data-id');
-              const r = await sendDelete('/admin/students/' + id);
-              if(r) row.remove();
-            }
-            if(e.target.matches('.delete-teacher')){
-              const row = e.target.closest('tr');
-              const id = row.getAttribute('data-id');
-              const r = await sendDelete('/admin/teachers/' + id);
-              if(r) row.remove();
-            }
-            if(e.target.matches('.delete-course')){
-              const row = e.target.closest('tr');
-              const id = row.getAttribute('data-id');
-              const r = await sendDelete('/admin/courses/' + id);
-              if(r) row.remove();
-            }
-            if(e.target.matches('.delete-attendance')){
-              const row = e.target.closest('tr');
-              const id = row.getAttribute('data-id');
-              const r = await sendDelete('/admin/attendance/' + id);
-              if(r) row.remove();
-            }
-          });
-        </script>
-      </body>
-    </html>`;
+    .stat-card h2 {
+      margin: 0.25rem 0 0.75rem;
+      font-weight: 700;
+      font-size: clamp(1.9rem, 6vw, 2.75rem);
+      line-height: 1.1;
+    }
+
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 1rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      overflow-x: auto;
+      margin: 0.75rem 0 0;
+      max-height: 260px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .table-section {
+      background: var(--card-bg);
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      padding: 1.25rem;
+      margin-bottom: 2rem;
+    }
+
+    .table-section h5 {
+      margin: 0 0 1rem 0;
+      font-weight: 600;
+      font-size: 1.25rem;
+    }
+
+    .table-responsive {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 0 -0.5rem;
+    }
+
+    .table {
+      width: 100%;
+      margin-bottom: 0;
+      font-size: 0.95rem;
+    }
+
+    .table th,
+    .table td {
+      padding: 0.75rem;
+      vertical-align: middle;
+    }
+
+    .table thead th {
+      background: #f1f5f9;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    td.long-text {
+      white-space: normal !important;
+      word-break: break-word;
+      min-width: 160px;
+    }
+
+    .btn-sm {
+      padding: 0.4rem 0.85rem;
+      font-size: 0.875rem;
+    }
+
+    /* ── RESPONSIVE ─────────────────────────────────────────────── */
+    @media (max-width: 992px) {
+      .card-grid { gap: 1rem; }
+    }
+
+    @media (max-width: 768px) {
+      body { padding: 0.875rem; }
+      .topbar { flex-direction: column; align-items: flex-start; }
+      .stat-card { padding: 1.25rem; }
+      .table-section { padding: 1rem; }
+      .btn { width: 100%; margin-top: 0.5rem; }
+      .table th, .table td { padding: 0.6rem; }
+    }
+
+    @media (max-width: 576px) {
+      .topbar h1 { font-size: 1.3rem; }
+      .stat-card h2 { font-size: 2.1rem; }
+      .table th, .table td { font-size: 0.875rem; }
+      pre { font-size: 0.8rem; padding: 0.75rem; }
+      .table-responsive { margin: 0 -0.875rem; }
+      .btn-sm { padding: 0.35rem 0.7rem; font-size: 0.85rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div>
+      <h1>Biometric App — Admin</h1>
+      <small class="text-muted">Overview & live stats</small>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-outline-secondary" href="/">Home</a>
+      <a class="btn btn-danger logout-btn" href="/admin/logout">Sign out</a>
+    </div>
+  </div>
+
+  <div class="card-grid">
+    <div class="stat-card">
+      <h6 class="text-muted">Total Requests:</h6>
+      <h2>${counters.total}</h2>
+      <small class="text-muted">By endpoint:</small>
+      <pre>${JSON.stringify(counters.byEndpoint, null, 2)}</pre>
+    </div>
+    <div class="stat-card">
+      <h6 class="text-muted">Students:</h6>
+      <h2>${students.length}</h2>
+      <p class="text-muted mb-0">Total registered students</p>
+    </div>
+    <div class="stat-card">
+      <h6 class="text-muted">Teachers:</h6>
+      <h2>${teachers.length}</h2>
+      <p class="text-muted mb-0">Total registered teachers</p>
+    </div>
+    <div class="stat-card">
+      <h6 class="text-muted">Courses:</h6>
+      <h2>${courses.length}</h2>
+      <p class="text-muted mb-0">Active courses</p>
+    </div>
+  </div>
+
+  <div class="table-section">
+    <h5>Students</h5>
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th class="long-text">Name</th>
+            <th class="long-text">Email</th>
+            <th style="width:110px;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${students.map(s =>`
+            <tr data-id="${s.stdId}">
+              <td>${s.stdId}</td>
+              <td class="long-text">${s.name}</td>
+              <td class="long-text">${s.email}</td>
+              <td><button class="btn btn-sm btn-danger delete-student w-100">Delete</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="table-section">
+    <h5>Teachers</h5>
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th class="long-text">Name</th>
+            <th class="long-text">Email</th>
+            <th style="width:110px;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${teachers.map(t => `
+            <tr data-id="\${t.teacherId}">
+              <td>${t.teacherId}</td>
+              <td class="long-text">${t.name}</td>
+              <td class="long-text">${t.email}</td>
+              <td><button class="btn btn-sm btn-danger delete-teacher w-100">Delete</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="table-section">
+    <h5>Courses</h5>
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th class="long-text">Title</th>
+            <th>Start</th>
+            <th>End</th>
+            <th>InstructorID</th>
+            <th style="width:110px;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${courses.map(c => `
+            <tr data-id="\${c.courseID}">
+              <td>${c.courseID}</td>
+              <td class="long-text">${c.title}</td>
+              <td>${new Date(c.startTime).toLocaleString()}</td>
+              <td>${new Date(c.endTime).toLocaleString()}</td>
+              <td>${c.instructorID}</td>
+              <td><button class="btn btn-sm btn-danger delete-course w-100">Delete</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="table-section">
+    <h5>Attendance Records (Latest 50)</h5>
+    <div class="table-responsive">
+      <table class="table table-hover table-bordered">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th class="long-text">Student</th>
+            <th class="long-text">Course</th>
+            <th>Status</th>
+            <th>Timestamp</th>
+            <th>Marked By</th>
+            <th style="width:110px;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${attendances.map(a => {
+            const att = a.toJSON ? a.toJSON() : a;
+            return `
+              <tr data-id="${att.attId}">
+                <td>${att.attId}</td>
+                <td class="long-text">${att.Student?.name || 'N/A'} (${att.stdId})</td>
+                <td class="long-text">${att.Course?.title || 'N/A'} (${att.courseID})</td>
+                <td>
+                  <span class="badge rounded-pill ${att.status === 'present' ? 'bg-success' : att.status === 'absent' ? 'bg-danger' : 'bg-warning'}">
+                    ${att.status}
+                  </span>
+                </td>
+                <td>${new Date(att.timestamp).toLocaleString()}</td>
+                <td>${att.markedBy || 'N/A'}</td>
+                <td><button class="btn btn-sm btn-danger delete-attendance w-100">Delete</button></td>
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    async function sendDelete(url){
+      if(!confirm('Are you sure you want to delete this item?')) return null;
+      const res = await fetch(url, { method: 'DELETE', credentials: 'same-origin' });
+      if(!res.ok){
+        const body = await res.text();
+        alert('Delete failed: ' + res.status + ' ' + body);
+        return null;
+      }
+      return await res.json().catch(()=>({}));
+    }
+
+    document.addEventListener('click', async (e) => {
+      if(e.target.matches('.delete-student')){
+        const row = e.target.closest('tr');
+        const id = row.getAttribute('data-id');
+        const r = await sendDelete('/admin/students/' + id);
+        if(r) row.remove();
+      }
+      if(e.target.matches('.delete-teacher')){
+        const row = e.target.closest('tr');
+        const id = row.getAttribute('data-id');
+        const r = await sendDelete('/admin/teachers/' + id);
+        if(r) row.remove();
+      }
+      if(e.target.matches('.delete-course')){
+        const row = e.target.closest('tr');
+        const id = row.getAttribute('data-id');
+        const r = await sendDelete('/admin/courses/' + id);
+        if(r) row.remove();
+      }
+      if(e.target.matches('.delete-attendance')){
+        const row = e.target.closest('tr');
+        const id = row.getAttribute('data-id');
+        const r = await sendDelete('/admin/attendance/' + id);
+        if(r) row.remove();
+      }
+    });
+  </script>
+
+</body>
+</html>`;
 
     res.setHeader('Content-Type', 'text/html');
     return res.send(html);
