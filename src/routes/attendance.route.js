@@ -480,8 +480,6 @@ router.post('/manual', teacherAuth, async (req, res) => {
 // GET /attendance/stats/:teacherID?date=YYYY-MM-DD (teacher attendance statistics for a specific date)
 router.get('/stats/:teacherID', async (req, res) => {
   console.log("Stats route hit", req.params, req.query); 
-    res.json({ ok: true });
-
   try {
     const { teacherID } = req.params;
     const { date } = req.query;
