@@ -479,6 +479,9 @@ router.post('/manual', teacherAuth, async (req, res) => {
 
 // GET /attendance/stats/:teacherID?date=YYYY-MM-DD (teacher attendance statistics for a specific date)
 router.get('/stats/:teacherID', async (req, res) => {
+  console.log("Stats route hit", req.params, req.query); 
+    res.json({ ok: true });
+
   try {
     const { teacherID } = req.params;
     const { date } = req.query;
@@ -489,7 +492,6 @@ router.get('/stats/:teacherID', async (req, res) => {
     if (!date) {
       return res.status(400).json({ message: 'date query parameter is required (format: YYYY-MM-DD)' });
     }
-
     // Get all courses taught by this teacher
     const courses = await Course.findAll({
       where: { instructorID: teacherID }
