@@ -19,11 +19,11 @@ const AttendanceSession = sequelize.define("AttendanceSession", {
     allowNull: false,
   },
   openedAt: {
-    type: DataTypes.STRING(5),
+    type: DataTypes.DATE,  // Changed from STRING(5) to DATE
     allowNull: false,
   },
   closedAt: {
-    type: DataTypes.STRING(5),
+    type: DataTypes.DATE,  // Changed from STRING(5) to DATE
     allowNull: true,
   },
   status: {
@@ -36,15 +36,14 @@ const AttendanceSession = sequelize.define("AttendanceSession", {
   },
 });
 
-// Associations
-AttendanceSession.belongsTo(Course, { foreignKey: "courseID",onDelete: "CASCADE", onUpdate: "CASCADE", });
-Course.hasMany(AttendanceSession, { foreignKey: "courseID",onDelete: "CASCADE", onUpdate: "CASCADE", });
+// Associations (keep as is)
+AttendanceSession.belongsTo(Course, { foreignKey: "courseID", onDelete: "CASCADE", onUpdate: "CASCADE" });
+Course.hasMany(AttendanceSession, { foreignKey: "courseID", onDelete: "CASCADE", onUpdate: "CASCADE" });
 
-AttendanceSession.belongsTo(Teacher, { foreignKey: "teacherId",onDelete: "CASCADE", onUpdate: "CASCADE", });
-Teacher.hasMany(AttendanceSession, { foreignKey: "teacherId",onDelete: "CASCADE", onUpdate: "CASCADE", });
+AttendanceSession.belongsTo(Teacher, { foreignKey: "teacherId", onDelete: "CASCADE", onUpdate: "CASCADE" });
+Teacher.hasMany(AttendanceSession, { foreignKey: "teacherId", onDelete: "CASCADE", onUpdate: "CASCADE" });
 
-// Link sessions to attendance records
-Attendance.belongsTo(AttendanceSession, { foreignKey: "sessionId",onDelete: "CASCADE", onUpdate: "CASCADE",});
-AttendanceSession.hasMany(Attendance, { foreignKey: "sessionId",onDelete: "CASCADE", onUpdate: "CASCADE", });
+Attendance.belongsTo(AttendanceSession, { foreignKey: "sessionId", onDelete: "CASCADE", onUpdate: "CASCADE" });
+AttendanceSession.hasMany(Attendance, { foreignKey: "sessionId", onDelete: "CASCADE", onUpdate: "CASCADE" });
 
 export default AttendanceSession;

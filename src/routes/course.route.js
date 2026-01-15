@@ -6,7 +6,6 @@ const router = Router()
 
 
 // POST /courses/course  
-
 router.post('/course', teacherAuth, async (req, res) => {
   const { title, startTime, endTime } = req.body;
   const instructorID = req.teacher.teacherId; 
@@ -15,7 +14,7 @@ router.post('/course', teacherAuth, async (req, res) => {
     return res.status(400).json({ message: 'title, startTime, and endTime are required' });
   }
 
-  // Validate time format
+  // Validate time format - now expecting "HH:mm" format
   const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
   if (!timeRegex.test(startTime) || !timeRegex.test(endTime)) {
     return res.status(400).json({ message: 'Invalid time format. Use HH:mm' });
@@ -29,10 +28,12 @@ router.post('/course', teacherAuth, async (req, res) => {
   }
 
   try {
+    // Create a Date object with today's date and the specified time
+    // We'll store it as a TIME type, so just pass the string
     const course = await Course.create({ 
       title, 
-      startTime,  // Store as "HH:mm" string
-      endTime,    // Store as "HH:mm" string
+      startTime: startTime,  // Store as "HH:mm:ss" string (TIME type)
+      endTime: endTime,      // Store as "HH:mm:ss" string (TIME type)
       instructorID 
     });
     

@@ -218,14 +218,14 @@ router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, re
     const teacherId = req.teacher.teacherId;
     const { openedAt, closedAt, status = 'open', notes } = req.body;
 
-    // verify course exists and teacher owns it
+    // Verify course exists and teacher owns it
     const course = await Course.findByPk(courseID);
     if (!course) return res.status(404).json({ message: 'Course not found' });
     if (parseInt(course.instructorID, 10) !== parseInt(teacherId, 10)) {
       return res.status(403).json({ message: 'Teacher does not own this course' });
     }
 
-    // Validate time format
+    // Validate time format - expecting "HH:mm" from frontend
     const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
     if (!openedAt || !timeRegex.test(openedAt)) {
       return res.status(400).json({ message: 'Invalid openedAt time format. Use HH:mm' });
@@ -234,7 +234,24 @@ router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, re
       return res.status(400).json({ message: 'Invalid closedAt time format. Use HH:mm' });
     }
 
-    // Convert times to minutes for comparison
+    // Get current date
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    // Parse openedAt time
+    const [openedHour, openedMinute] = openedAt.split(':').map(Number);
+    const openedDateTime = new Date(today);
+    openedDateTime.setHours(openedHour, openedMinute, 0, 0);
+    
+    // Parse closedAt time (if provided)
+    let closedDateTime = null;
+    if (closedAt) {
+      const [closedHour, closedMinute] = closedAt.split(':').map(Number);
+      closedDateTime = new Date(today);
+      closedDateTime.setHours(closedHour, closedMinute, 0, 0);
+    }
+
+    // Convert times to minutes for comparison with course times
     const timeToMinutes = (timeStr) => {
       const [h, m] = timeStr.split(':').map(Number);
       return h * 60 + m;
@@ -242,8 +259,10 @@ router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, re
 
     const openedMinutes = timeToMinutes(openedAt);
     const closedMinutes = closedAt ? timeToMinutes(closedAt) : null;
-    const courseStartMinutes = timeToMinutes(course.startTime);
-    const courseEndMinutes = timeToMinutes(course.endTime);
+    
+    // Parse course times (which are stored as TIME strings like "09:00:00")
+    const courseStartMinutes = timeToMinutes(course.startTime.slice(0, 5));
+    const courseEndMinutes = timeToMinutes(course.endTime.slice(0, 5));
 
     // Validation
     if (openedMinutes < courseStartMinutes) {
@@ -256,12 +275,12 @@ router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, re
       return res.status(400).json({ message: 'Session end time must be after start time' });
     }
 
-    // create session
+    // Create session with DATETIME values
     const session = await AttendanceSession.create({
       courseID: parseInt(courseID, 10),
       teacherId: parseInt(teacherId, 10),
-      openedAt,  // Store as "HH:mm" string
-      closedAt: closedAt || null,  // Store as "HH:mm" string or null
+      openedAt: openedDateTime,  // Store as DATETIME
+      closedAt: closedDateTime,  // Store as DATETIME or null
       status: status === 'open' ? 'open' : 'closed',
       notes: notes || null
     });
@@ -277,59 +296,84 @@ router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, re
 router.get('/course/:courseID/attendance-sessions/open', async (req, res) => {
   try {
     const { courseID } = req.params;
+    const now = new Date();
     
-    const session = await AttendanceSession.findOne({
-      where: {courseID},
+    // Find all open sessions for this course
+    const sessions = await AttendanceSession.findAll({
+      where: {
+        courseID,
+        status: 'open'
+      },
       order: [['openedAt', 'DESC']]
     });
+
+    if (!sessions || sessions.length === 0) {
+      return res.json({ active: false });
+    }
 
     // Fetch the course to validate against course times
     const course = await Course.findByPk(courseID);
     if (!course) return res.json({ active: false });
 
-    // Helper to convert "HH:mm" to minutes since midnight
-    const timeToMinutes = (timeStr) => {
-      const [h, m] = timeStr.split(':').map(Number);
+    // Helper to extract minutes from TIME string (course times)
+    const timeStringToMinutes = (timeStr) => {
+      const timePart = timeStr.slice(0, 5); // Get "HH:mm" part
+      const [h, m] = timePart.split(':').map(Number);
       return h * 60 + m;
     };
 
     // Get current time in minutes
-    const now = new Date();
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const courseStartMinutes = timeStringToMinutes(course.startTime);
+    const courseEndMinutes = timeStringToMinutes(course.endTime);
 
-    // Convert all times to minutes
-    const openedMinutes = timeToMinutes(session.openedAt);
-    const closedMinutes = session.closedAt ? timeToMinutes(session.closedAt) : null;
-    const courseStartMinutes = timeToMinutes(course.startTime);
-    const courseEndMinutes = timeToMinutes(course.endTime);
-
-    // Validate session times against course times
-    if (openedMinutes < courseStartMinutes) {
-      return res.json({ active: false }); // Session starts before course
+    // Check each open session
+    for (const session of sessions) {
+      // Get session times as Date objects
+      const openedAt = new Date(session.openedAt);
+      const closedAt = session.closedAt ? new Date(session.closedAt) : null;
+      
+      // Check if session is for today (same date)
+      const isSameDay = openedAt.getDate() === now.getDate() &&
+                       openedAt.getMonth() === now.getMonth() &&
+                       openedAt.getFullYear() === now.getFullYear();
+      
+      if (!isSameDay) {
+        continue; // Session is not for today
+      }
+      
+      // Convert session times to minutes for comparison
+      const openedMinutes = openedAt.getHours() * 60 + openedAt.getMinutes();
+      const closedMinutes = closedAt ? closedAt.getHours() * 60 + closedAt.getMinutes() : null;
+      
+      // Validate session times against course times
+      if (openedMinutes < courseStartMinutes) {
+        continue; // Session starts before course
+      }
+      if (closedMinutes && closedMinutes > courseEndMinutes) {
+        continue; // Session ends after course
+      }
+      
+      // Check if current time is within session bounds
+      const isWithinBounds = nowMinutes >= openedMinutes && 
+                            (closedMinutes === null || nowMinutes <= closedMinutes);
+      
+      if (isWithinBounds) {
+        return res.json({ 
+          active: true, 
+          sessionId: session.sessionId, 
+          courseID: session.courseID, 
+          teacherId: session.teacherId, 
+          openedAt: session.openedAt, 
+          closedAt: session.closedAt, 
+          status: session.status, 
+          notes: session.notes
+        });
+      }
     }
-    if (closedMinutes && closedMinutes > courseEndMinutes) {
-      return res.json({ active: false }); // Session ends after course
-    }
 
-    // Check if current time is within session bounds
-    // nowMinutes must be >= openedMinutes AND <= closedMinutes (if closedAt exists)
-    const isWithinBounds = nowMinutes >= openedMinutes && 
-                          (closedMinutes === null || nowMinutes <= closedMinutes);
-
-    if (!isWithinBounds) {
-      return res.json({ active: false });
-    }
-
-    return res.json({ 
-      active: true, 
-      sessionId: session.sessionId, 
-      courseID: session.courseID, 
-      teacherId: session.teacherId, 
-      openedAt: session.openedAt, 
-      closedAt: session.closedAt, 
-      status: session.status, 
-      notes: session.notes
-    });
+    // No active session found
+    return res.json({ active: false });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Server error' });
@@ -361,10 +405,23 @@ router.get('/course/:courseID/attendance-sessions', teacherAuth, async (req, res
       where,
       order: [['openedAt', 'DESC']],
       limit,
-      offset
+      offset,
+      // Include the course to get course time details if needed
+      include: [{ 
+        model: Course, 
+        attributes: ['courseID', 'title', 'startTime', 'endTime'] 
+      }]
     });
 
-    return res.json({ data: rows, meta: { page, limit, total: count, totalPages: Math.ceil(count / limit) || 1 } });
+    return res.json({ 
+      data: rows, 
+      meta: { 
+        page, 
+        limit, 
+        total: count, 
+        totalPages: Math.ceil(count / limit) || 1 
+      } 
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Server error' });
@@ -382,34 +439,73 @@ router.get('/attendance-sessions/:sessionID/attendance', async (req, res) => {
     if (Number.isNaN(limit) || limit < 1 || limit > 200) limit = 50;
     const offset = (page - 1) * limit;
 
+    // First, verify the session exists (optional but good practice)
+    const session = await AttendanceSession.findByPk(sessionID);
+    if (!session) {
+      return res.status(404).json({ message: 'Attendance session not found' });
+    }
+
     const { count, rows } = await Attendance.findAndCountAll({
       where: { sessionId: sessionID },
       order: [['timestamp', 'DESC']],
       limit,
       offset,
-      include: [ { model: Student, attributes: ['stdId','name','email'] }, { model: Course, attributes: ['courseID','title'] } ]
+      include: [ 
+        { 
+          model: Student, 
+          attributes: ['stdId', 'name', 'email'] 
+        }, 
+        { 
+          model: AttendanceSession,
+          include: [{
+            model: Course,
+            attributes: ['courseID', 'title']
+          }]
+        }
+      ]
     });
 
     const data = rows.map(r => {
       const item = r.toJSON ? r.toJSON() : r;
       if (item.Student) {
-        item.student = { stdId: item.Student.stdId, name: item.Student.name, email: item.Student.email };
+        item.student = { 
+          stdId: item.Student.stdId, 
+          name: item.Student.name, 
+          email: item.Student.email 
+        };
         delete item.Student;
       }
-      if (item.Course) {
-        item.course = { courseID: item.Course.courseID, title: item.Course.title };
-        delete item.Course;
+      if (item.AttendanceSession) {
+        item.session = {
+          sessionId: item.AttendanceSession.sessionId,
+          openedAt: item.AttendanceSession.openedAt,
+          closedAt: item.AttendanceSession.closedAt,
+          status: item.AttendanceSession.status,
+          course: item.AttendanceSession.Course
+        };
+        delete item.AttendanceSession;
+        if (item.session.course) {
+          item.course = item.session.course;
+          delete item.session.course;
+        }
       }
       return item;
     });
 
-    return res.json({ data, meta: { page, limit, total: count, totalPages: Math.ceil(count / limit) || 1 } });
+    return res.json({ 
+      data, 
+      meta: { 
+        page, 
+        limit, 
+        total: count, 
+        totalPages: Math.ceil(count / limit) || 1 
+      } 
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Server error' });
   }
 });
-
 
 
 // GET /attendance  (list with filters + pagination)
