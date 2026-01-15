@@ -277,7 +277,7 @@ router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, re
 router.get('/course/:courseID/attendance-sessions/open', async (req, res) => {
   try {
     const { courseID } = req.params;
-    const now = new Date();
+    
     const session = await AttendanceSession.findOne({
       where: {
         courseID,
@@ -288,9 +288,26 @@ router.get('/course/:courseID/attendance-sessions/open', async (req, res) => {
 
     if (!session) return res.json({ active: false });
 
-    // ensure time bounds
-    if (new Date(session.openedAt) > now) return res.json({ active: false });
-    if (session.closedAt && new Date(session.closedAt) < now) return res.json({ active: false });
+    // Helper to convert "HH:mm" to minutes since midnight
+    const timeToMinutes = (timeStr) => {
+      const [h, m] = timeStr.split(':').map(Number);
+      return h * 60 + m;
+    };
+
+    // Get current time in minutes
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const openedMinutes = timeToMinutes(session.openedAt);
+    const closedMinutes = session.closedAt ? timeToMinutes(session.closedAt) : null;
+
+    // Check if current time is within session bounds
+    const isWithinBounds = nowMinutes >= openedMinutes && 
+                          (closedMinutes === null || nowMinutes <= closedMinutes);
+
+    if (!isWithinBounds) {
+      return res.json({ active: false });
+    }
 
     return res.json({ 
       active: true, 
@@ -300,7 +317,7 @@ router.get('/course/:courseID/attendance-sessions/open', async (req, res) => {
       openedAt: session.openedAt, 
       closedAt: session.closedAt, 
       status: session.status, 
-      notes: session.note
+      notes: session.notes 
     });
   } catch (err) {
     console.error(err);
