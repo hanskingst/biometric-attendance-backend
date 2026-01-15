@@ -281,7 +281,6 @@ router.get('/course/:courseID/attendance-sessions/open', async (req, res) => {
     const session = await AttendanceSession.findOne({
       where: {
         courseID,
-        status: 'open'
       },
       order: [['openedAt', 'DESC']]
     });

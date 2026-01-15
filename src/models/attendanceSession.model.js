@@ -28,7 +28,7 @@ const AttendanceSession = sequelize.define("AttendanceSession", {
   },
   status: {
     type: DataTypes.ENUM("open", "closed"),
-    defaultValue: "closed",
+    defaultValue: "open",
   },
   notes: {
     type: DataTypes.TEXT,
