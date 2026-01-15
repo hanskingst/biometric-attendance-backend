@@ -16,7 +16,31 @@ router.post('/course', teacherAuth, async (req, res) => {
   }
 
   try {
-    const course = await Course.create({ title, startTime, endTime, instructorID });
+    // Helper function to convert "HH:mm" to today's Date object
+    const parseTimeToDate = (timeString) => {
+      if (!timeString) return null;
+      const [hours, minutes] = timeString.split(':').map(Number);
+      const date = new Date();
+      date.setHours(hours, minutes, 0, 0);
+      return date;
+    };
+
+    // Convert time strings to Date objects
+    const start = parseTimeToDate(startTime);
+    const end = parseTimeToDate(endTime);
+
+    // Validate end time is after start time
+    if (end <= start) {
+      return res.status(400).json({ message: 'End time must be after start time' });
+    }
+
+    const course = await Course.create({ 
+      title, 
+      startTime: start,  // Store as Date object
+      endTime: end,      // Store as Date object
+      instructorID 
+    });
+    
     res.status(201).json({ message: "course registered successfully", course });
   } catch (error) {
     console.error(error);

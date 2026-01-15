@@ -226,8 +226,18 @@ router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, re
     }
 
     const now = new Date();
-    const opened = openedAt ? new Date(openedAt) : now;
-    const closed = closedAt ? new Date(closedAt) : null;
+    
+    // Helper function to convert "HH:mm" to today's Date object
+    const parseTimeToDate = (timeString) => {
+      if (!timeString) return null;
+      const [hours, minutes] = timeString.split(':').map(Number);
+      const date = new Date();
+      date.setHours(hours, minutes, 0, 0);
+      return date;
+    };
+
+    const opened = openedAt ? parseTimeToDate(openedAt) : now;
+    const closed = closedAt ? parseTimeToDate(closedAt) : null;
 
     // Validation against course times
     const courseStart = new Date(course.startTime);
@@ -259,7 +269,6 @@ router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, re
     return res.status(500).json({ message: 'Server error' });
   }
 });
-
 
 // GET /course/:courseID/attendance-sessions/open  (is there an active session?)
 router.get('/course/:courseID/attendance-sessions/open', async (req, res) => {
