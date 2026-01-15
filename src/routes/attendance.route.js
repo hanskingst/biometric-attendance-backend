@@ -283,8 +283,6 @@ router.get('/course/:courseID/attendance-sessions/open', async (req, res) => {
       order: [['openedAt', 'DESC']]
     });
 
-    if (!session) return res.json({ active: false });
-
     // Fetch the course to validate against course times
     const course = await Course.findByPk(courseID);
     if (!course) return res.json({ active: false });
