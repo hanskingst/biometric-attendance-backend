@@ -288,6 +288,10 @@ router.get('/course/:courseID/attendance-sessions/open', async (req, res) => {
 
     if (!session) return res.json({ active: false });
 
+    // Fetch the course to validate against course times
+    const course = await Course.findByPk(courseID);
+    if (!course) return res.json({ active: false });
+
     // Helper to convert "HH:mm" to minutes since midnight
     const timeToMinutes = (timeStr) => {
       const [h, m] = timeStr.split(':').map(Number);
@@ -298,10 +302,22 @@ router.get('/course/:courseID/attendance-sessions/open', async (req, res) => {
     const now = new Date();
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
+    // Convert all times to minutes
     const openedMinutes = timeToMinutes(session.openedAt);
     const closedMinutes = session.closedAt ? timeToMinutes(session.closedAt) : null;
+    const courseStartMinutes = timeToMinutes(course.startTime);
+    const courseEndMinutes = timeToMinutes(course.endTime);
+
+    // Validate session times against course times
+    if (openedMinutes < courseStartMinutes) {
+      return res.json({ active: false }); // Session starts before course
+    }
+    if (closedMinutes && closedMinutes > courseEndMinutes) {
+      return res.json({ active: false }); // Session ends after course
+    }
 
     // Check if current time is within session bounds
+    // nowMinutes must be >= openedMinutes AND <= closedMinutes (if closedAt exists)
     const isWithinBounds = nowMinutes >= openedMinutes && 
                           (closedMinutes === null || nowMinutes <= closedMinutes);
 
@@ -317,7 +333,7 @@ router.get('/course/:courseID/attendance-sessions/open', async (req, res) => {
       openedAt: session.openedAt, 
       closedAt: session.closedAt, 
       status: session.status, 
-      notes: session.notes 
+      notes: session.notes
     });
   } catch (err) {
     console.error(err);
