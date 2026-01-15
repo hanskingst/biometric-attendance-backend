@@ -15,29 +15,24 @@ router.post('/course', teacherAuth, async (req, res) => {
     return res.status(400).json({ message: 'title, startTime, and endTime are required' });
   }
 
+  // Validate time format
+  const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  if (!timeRegex.test(startTime) || !timeRegex.test(endTime)) {
+    return res.status(400).json({ message: 'Invalid time format. Use HH:mm' });
+  }
+
+  // Validate end time is after start time
+  const [sH, sM] = startTime.split(':').map(Number);
+  const [eH, eM] = endTime.split(':').map(Number);
+  if (eH * 60 + eM <= sH * 60 + sM) {
+    return res.status(400).json({ message: 'End time must be after start time' });
+  }
+
   try {
-    // Helper function to convert "HH:mm" to today's Date object
-    const parseTimeToDate = (timeString) => {
-      if (!timeString) return null;
-      const [hours, minutes] = timeString.split(':').map(Number);
-      const date = new Date();
-      date.setHours(hours, minutes, 0, 0);
-      return date;
-    };
-
-    // Convert time strings to Date objects
-    const start = parseTimeToDate(startTime);
-    const end = parseTimeToDate(endTime);
-
-    // Validate end time is after start time
-    if (end <= start) {
-      return res.status(400).json({ message: 'End time must be after start time' });
-    }
-
     const course = await Course.create({ 
       title, 
-      startTime: start,  // Store as Date object
-      endTime: end,      // Store as Date object
+      startTime,  // Store as "HH:mm" string
+      endTime,    // Store as "HH:mm" string
       instructorID 
     });
     

@@ -211,7 +211,7 @@ router.post('/attendance-sessions/:sessionID/attendance', async (req, res) => {
   }
 });
 
-// POST /course/:courseID/attendance-sessions  (teacher creates/starts a session)
+// POST /course/:courseID/attendance-sessions
 router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, res) => {
   try {
     const { courseID } = req.params;
@@ -225,31 +225,34 @@ router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, re
       return res.status(403).json({ message: 'Teacher does not own this course' });
     }
 
-    const now = new Date();
-    
-    // Helper function to convert "HH:mm" to today's Date object
-    const parseTimeToDate = (timeString) => {
-      if (!timeString) return null;
-      const [hours, minutes] = timeString.split(':').map(Number);
-      const date = new Date();
-      date.setHours(hours, minutes, 0, 0);
-      return date;
+    // Validate time format
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!openedAt || !timeRegex.test(openedAt)) {
+      return res.status(400).json({ message: 'Invalid openedAt time format. Use HH:mm' });
+    }
+    if (closedAt && !timeRegex.test(closedAt)) {
+      return res.status(400).json({ message: 'Invalid closedAt time format. Use HH:mm' });
+    }
+
+    // Convert times to minutes for comparison
+    const timeToMinutes = (timeStr) => {
+      const [h, m] = timeStr.split(':').map(Number);
+      return h * 60 + m;
     };
 
-    const opened = openedAt ? parseTimeToDate(openedAt) : now;
-    const closed = closedAt ? parseTimeToDate(closedAt) : null;
+    const openedMinutes = timeToMinutes(openedAt);
+    const closedMinutes = closedAt ? timeToMinutes(closedAt) : null;
+    const courseStartMinutes = timeToMinutes(course.startTime);
+    const courseEndMinutes = timeToMinutes(course.endTime);
 
-    // Validation against course times
-    const courseStart = new Date(course.startTime);
-    const courseEnd = new Date(course.endTime);
-
-    if (opened < courseStart) {
+    // Validation
+    if (openedMinutes < courseStartMinutes) {
       return res.status(400).json({ message: 'Session start time must be >= course start time' });
     }
-    if (closed && closed > courseEnd) {
+    if (closedMinutes && closedMinutes > courseEndMinutes) {
       return res.status(400).json({ message: 'Session end time must be <= course end time' });
     }
-    if (closed && closed < opened) {
+    if (closedMinutes && closedMinutes <= openedMinutes) {
       return res.status(400).json({ message: 'Session end time must be after start time' });
     }
 
@@ -257,8 +260,8 @@ router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, re
     const session = await AttendanceSession.create({
       courseID: parseInt(courseID, 10),
       teacherId: parseInt(teacherId, 10),
-      openedAt: opened,
-      closedAt: closed,
+      openedAt,  // Store as "HH:mm" string
+      closedAt: closedAt || null,  // Store as "HH:mm" string or null
       status: status === 'open' ? 'open' : 'closed',
       notes: notes || null
     });

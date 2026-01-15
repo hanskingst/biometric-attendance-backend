@@ -19,11 +19,11 @@ const AttendanceSession = sequelize.define("AttendanceSession", {
     allowNull: false,
   },
   openedAt: {
-    type: DataTypes.DATE,
+    type: DataTypes.STRING(5),
     allowNull: false,
   },
   closedAt: {
-    type: DataTypes.DATE,
+    type: DataTypes.STRING(5),
     allowNull: true,
   },
   status: {
