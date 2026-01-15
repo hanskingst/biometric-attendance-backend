@@ -406,7 +406,7 @@ router.get('/dashboard', requireAdmin, async (req, res) => {
         </thead>
         <tbody>
           ${teachers.map(t => `
-            <tr data-id="\${t.teacherId}">
+            <tr data-id="${t.teacherId}">
               <td>${t.teacherId}</td>
               <td class="long-text">${t.name}</td>
               <td class="long-text">${t.email}</td>
@@ -434,7 +434,7 @@ router.get('/dashboard', requireAdmin, async (req, res) => {
         </thead>
         <tbody>
           ${courses.map(c => `
-            <tr data-id="\${c.courseID}">
+            <tr data-id="${c.courseID}">
               <td>${c.courseID}</td>
               <td class="long-text">${c.title}</td>
               <td>${new Date(c.startTime).toLocaleString()}</td>
