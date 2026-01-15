@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { Course, Teacher } from "../models/index.js";
-import Teacher from "../models/index.js";
 import teacherAuth from "../middleware/teacherAuth.js";
 
 const router = Router()
