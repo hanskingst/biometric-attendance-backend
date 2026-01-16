@@ -213,6 +213,15 @@ router.post('/attendance-sessions/:sessionID/attendance', async (req, res) => {
 
 // POST /course/:courseID/attendance-sessions
 router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, res) => {
+  // Add these at the very beginning of your route handler
+console.log('====== SESSION CREATION DEBUG ======');
+console.log('1. Server current time (local):', new Date());
+console.log('2. Server current time (ISO):', new Date().toISOString());
+console.log('3. Server current year:', new Date().getFullYear());
+console.log('4. Server current month:', new Date().getMonth());
+console.log('5. Server current day:', new Date().getDate());
+console.log('6. Received payload:', req.body);
+console.log('====================================');
   try {
     const { courseID } = req.params;
     const teacherId = req.teacher.teacherId;
