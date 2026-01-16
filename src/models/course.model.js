@@ -23,6 +23,12 @@ const Course = sequelize.define("Course", {
     type: DataTypes.TIME,  // Changed from STRING(5) to TIME
     allowNull: false,
   },
+  teacherTimezoneOffset: {  // ADD THIS FIELD
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0,  // Default to UTC (0 minutes offset)
+    comment: "Teacher's timezone offset in minutes from UTC when session was created"
+  },
 });
 
 // relationships between course and teacher

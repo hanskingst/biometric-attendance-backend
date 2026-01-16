@@ -312,22 +312,23 @@ router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, re
       return res.status(400).json({ message: 'Session end time must be after start time' });
     }
 
-    // Create session with DATETIME values
-    const session = await AttendanceSession.create({
-      courseID: parseInt(courseID, 10),
-      teacherId: parseInt(teacherId, 10),
-      openedAt: openedDateTime,  // Store as DATETIME in UTC
-      closedAt: closedDateTime,  // Store as DATETIME in UTC or null
-      status: status === 'open' ? 'open' : 'closed',
-      notes: notes || null
-    });
+   const session = await AttendanceSession.create({
+  courseID: parseInt(courseID, 10),
+  teacherId: parseInt(teacherId, 10),
+  openedAt: openedDateTime,
+  closedAt: closedDateTime,
+  status: status === 'open' ? 'open' : 'closed',
+  notes: notes || null,
+  teacherTimezoneOffset: teacherTimezoneOffset  // ADD THIS
+});
 
     console.log('Session created in database:', {
       sessionId: session.sessionId,
       openedAt: session.openedAt,
       closedAt: session.closedAt,
       openedAtISO: session.openedAt.toISOString?.(),
-      closedAtISO: session.closedAt?.toISOString?.()
+      closedAtISO: session.closedAt?.toISOString?.(),
+      teacherTimezoneOffset: teacherTimezoneOffset 
     });
 
     return res.status(201).json({ message: 'Attendance session created', session });
@@ -341,7 +342,10 @@ router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, re
 router.get('/course/:courseID/attendance-sessions/open', async (req, res) => {
   try {
     const { courseID } = req.params;
-    const now = new Date();
+    const nowUTC = new Date(); // Server UTC time
+    
+    console.log('=== OPEN SESSION CHECK ===');
+    console.log('Current UTC time:', nowUTC.toISOString());
     
     // Find all open sessions for this course
     const sessions = await AttendanceSession.findAll({
@@ -353,77 +357,130 @@ router.get('/course/:courseID/attendance-sessions/open', async (req, res) => {
     });
 
     if (!sessions || sessions.length === 0) {
+      console.log('No open sessions found for course:', courseID);
       return res.json({ active: false });
     }
 
-    // Fetch the course to validate against course times
+    // Fetch the course
     const course = await Course.findByPk(courseID);
-    if (!course) return res.json({ active: false });
+    if (!course) {
+      console.log('Course not found:', courseID);
+      return res.json({ active: false });
+    }
 
-    // Helper to extract minutes from TIME string (course times)
+    // Get course's timezone offset (when the course was created)
+    const courseTimezoneOffset = course.teacherTimezoneOffset || 0;
+    console.log('Course timezone offset:', courseTimezoneOffset, 'minutes');
+    console.log('Course start time:', course.startTime, 'Course end time:', course.endTime);
+
+    // Helper to extract minutes from TIME string
     const timeStringToMinutes = (timeStr) => {
-      const timePart = timeStr.slice(0, 5); // Get "HH:mm" part
+      const timePart = timeStr.slice(0, 5);
       const [h, m] = timePart.split(':').map(Number);
       return h * 60 + m;
     };
 
-    // Get current time in minutes
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    // Get course times in minutes (teacher's local time when course was created)
     const courseStartMinutes = timeStringToMinutes(course.startTime);
     const courseEndMinutes = timeStringToMinutes(course.endTime);
 
     // Check each open session
     for (const session of sessions) {
-      // Get session times as Date objects
-      const openedAt = new Date(session.openedAt);
-      const closedAt = session.closedAt ? new Date(session.closedAt) : null;
+      console.log('\nChecking session:', session.sessionId);
+      console.log('Session UTC openedAt:', session.openedAt);
+      console.log('Session UTC closedAt:', session.closedAt);
+      console.log('Session timezone offset:', session.teacherTimezoneOffset, 'minutes');
       
-      // Check if session is for today (same date)
-      const isSameDay = openedAt.getDate() === now.getDate() &&
-                       openedAt.getMonth() === now.getMonth() &&
-                       openedAt.getFullYear() === now.getFullYear();
+      const openedAtUTC = new Date(session.openedAt);
+      const closedAtUTC = session.closedAt ? new Date(session.closedAt) : null;
       
-      if (!isSameDay) {
-        continue; // Session is not for today
+      // Get session's timezone offset (when the session was created)
+      const sessionTimezoneOffset = session.teacherTimezoneOffset || 0;
+      
+      // Convert session UTC times back to teacher's local time (when session was created)
+      const openedAtLocal = new Date(openedAtUTC.getTime() + (sessionTimezoneOffset * 60000));
+      const closedAtLocal = closedAtUTC ? 
+        new Date(closedAtUTC.getTime() + (sessionTimezoneOffset * 60000)) : null;
+      
+      // IMPORTANT: Convert current UTC time to the session's local time
+      const nowLocal = new Date(nowUTC.getTime() + (sessionTimezoneOffset * 60000));
+      
+      console.log('Session local openedAt:', openedAtLocal.toISOString());
+      console.log('Session local closedAt:', closedAtLocal?.toISOString());
+      console.log('Current local time (for session):', nowLocal.toISOString());
+      
+      // Check if session is for today (teacher's local date when session was created)
+      const isSameDayLocal = openedAtLocal.getUTCDate() === nowLocal.getUTCDate() &&
+                            openedAtLocal.getUTCMonth() === nowLocal.getUTCMonth() &&
+                            openedAtLocal.getUTCFullYear() === nowLocal.getUTCFullYear();
+      
+      if (!isSameDayLocal) {
+        console.log('Session is not for today in teacher\'s local time');
+        continue;
       }
       
-      // Convert session times to minutes for comparison
-      const openedMinutes = openedAt.getHours() * 60 + openedAt.getMinutes();
-      const closedMinutes = closedAt ? closedAt.getHours() * 60 + closedAt.getMinutes() : null;
+      // Get session times in minutes (teacher's local time)
+      const openedMinutesLocal = openedAtLocal.getUTCHours() * 60 + openedAtLocal.getUTCMinutes();
+      const closedMinutesLocal = closedAtLocal ? 
+        closedAtLocal.getUTCHours() * 60 + closedAtLocal.getUTCMinutes() : null;
+      const nowMinutesLocal = nowLocal.getUTCHours() * 60 + nowLocal.getUTCMinutes();
       
-      // Validate session times against course times
-      if (openedMinutes < courseStartMinutes) {
-        continue; // Session starts before course
+      console.log('Session local minutes:', { opened: openedMinutesLocal, closed: closedMinutesLocal });
+      console.log('Current local minutes:', nowMinutesLocal);
+      console.log('Course minutes:', { start: courseStartMinutes, end: courseEndMinutes });
+      
+      // CRITICAL: Convert session local times to course's timezone for validation
+      // This accounts for teacher traveling to different timezones
+      const openedMinutesInCourseTimezone = openedMinutesLocal + (courseTimezoneOffset - sessionTimezoneOffset);
+      const closedMinutesInCourseTimezone = closedMinutesLocal ? 
+        closedMinutesLocal + (courseTimezoneOffset - sessionTimezoneOffset) : null;
+      
+      console.log('Session times in course timezone:', { 
+        opened: openedMinutesInCourseTimezone, 
+        closed: closedMinutesInCourseTimezone 
+      });
+      
+      // Validate against course times (which are in course's original timezone)
+      if (openedMinutesInCourseTimezone < courseStartMinutes) {
+        console.log('Session starts before course (in course timezone)');
+        continue;
       }
-      if (closedMinutes && closedMinutes > courseEndMinutes) {
-        continue; // Session ends after course
+      if (closedMinutesInCourseTimezone && closedMinutesInCourseTimezone > courseEndMinutes) {
+        console.log('Session ends after course (in course timezone)');
+        continue;
       }
       
-      // Check if current time is within session bounds
-      const isWithinBounds = nowMinutes >= openedMinutes && 
-                            (closedMinutes === null || nowMinutes <= closedMinutes);
+      // Check if current local time (in session's timezone) is within session bounds
+      const isWithinBounds = nowMinutesLocal >= openedMinutesLocal && 
+                            (closedMinutesLocal === null || nowMinutesLocal <= closedMinutesLocal);
+      
+      console.log('Is within session bounds?', isWithinBounds);
       
       if (isWithinBounds) {
+        console.log('ACTIVE SESSION FOUND:', session.sessionId);
         return res.json({ 
           active: true, 
-          sessionId: session.sessionId, 
-          courseID: session.courseID, 
-          teacherId: session.teacherId, 
-          openedAt: session.openedAt, 
-          closedAt: session.closedAt, 
-          status: session.status, 
+          sessionId: session.sessionId,
+          courseID: session.courseID,
+          teacherId: session.teacherId,
+          openedAt: session.openedAt,
+          closedAt: session.closedAt,
+          status: session.status,
           notes: session.notes
         });
       }
+      
+      console.log('Session not active right now');
     }
 
-    // No active session found
+    console.log('No active session found');
     return res.json({ active: false });
   } catch (err) {
-    console.error(err);
+    console.error('Error in /open endpoint:', err);
     return res.status(500).json({ message: 'Server error' });
   }
 });
+
 
 // GET /course/:courseID/attendance-sessions  (teacher lists sessions for a course)
 router.get('/course/:courseID/attendance-sessions', teacherAuth, async (req, res) => {

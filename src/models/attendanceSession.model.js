@@ -19,11 +19,11 @@ const AttendanceSession = sequelize.define("AttendanceSession", {
     allowNull: false,
   },
   openedAt: {
-    type: DataTypes.DATE,  // Changed from STRING(5) to DATE
+    type: DataTypes.DATE,
     allowNull: false,
   },
   closedAt: {
-    type: DataTypes.DATE,  // Changed from STRING(5) to DATE
+    type: DataTypes.DATE,
     allowNull: true,
   },
   status: {
@@ -33,6 +33,12 @@ const AttendanceSession = sequelize.define("AttendanceSession", {
   notes: {
     type: DataTypes.TEXT,
     allowNull: true,
+  },
+  teacherTimezoneOffset: {  // ADD THIS FIELD
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0,  // Default to UTC (0 minutes offset)
+    comment: "Teacher's timezone offset in minutes from UTC when session was created"
   },
 });
 

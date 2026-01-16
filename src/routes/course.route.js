@@ -16,8 +16,15 @@ console.log('4. Server current month:', new Date().getMonth());
 console.log('5. Server current day:', new Date().getDate());
 console.log('6. Received payload:', req.body);
 console.log('====================================');
+
   const { title, startTime, endTime } = req.body;
   const instructorID = req.teacher.teacherId; 
+
+  // Get timezone offset from request body (frontend sends this)
+  // Default to 0 (UTC) if not provided
+  const teacherTimezoneOffset = req.body.timezoneOffset || 0;
+  
+  console.log('Teacher timezone offset:', teacherTimezoneOffset, 'minutes');
 
   if (!title || !startTime || !endTime) {
     return res.status(400).json({ message: 'title, startTime, and endTime are required' });
@@ -37,16 +44,24 @@ console.log('====================================');
   }
 
   try {
-    // Create a Date object with today's date and the specified time
-    // We'll store it as a TIME type, so just pass the string
+    // Create the course with teacher's timezone offset
     const course = await Course.create({ 
       title, 
       startTime: startTime,  // Store as "HH:mm:ss" string (TIME type)
       endTime: endTime,      // Store as "HH:mm:ss" string (TIME type)
-      instructorID 
+      instructorID,
+      teacherTimezoneOffset  // Store the teacher's timezone offset
     });
     
-    res.status(201).json({ message: "course registered successfully", course });
+    console.log('Course created with timezone offset:', course.teacherTimezoneOffset);
+    
+    res.status(201).json({ 
+      message: "course registered successfully", 
+      course: {
+        ...course.toJSON(),
+        // Don't send the timezone offset to frontend unless needed
+      }
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Server error" });
