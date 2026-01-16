@@ -7,6 +7,15 @@ const router = Router()
 
 // POST /courses/course  
 router.post('/course', teacherAuth, async (req, res) => {
+    // Add these at the very beginning of your route handler
+console.log('====== COURSE CREATION DEBUG ======');
+console.log('1. Server current time (local):', new Date());
+console.log('2. Server current time (ISO):', new Date().toISOString());
+console.log('3. Server current year:', new Date().getFullYear());
+console.log('4. Server current month:', new Date().getMonth());
+console.log('5. Server current day:', new Date().getDate());
+console.log('6. Received payload:', req.body);
+console.log('====================================');
   const { title, startTime, endTime } = req.body;
   const instructorID = req.teacher.teacherId; 
 
