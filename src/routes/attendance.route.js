@@ -214,14 +214,15 @@ router.post('/attendance-sessions/:sessionID/attendance', async (req, res) => {
 // POST /course/:courseID/attendance-sessions
 router.post('/course/:courseID/attendance-sessions', teacherAuth, async (req, res) => {
   // Add these at the very beginning of your route handler
-console.log('====== SESSION CREATION DEBUG ======');
-console.log('1. Server current time (local):', new Date());
-console.log('2. Server current time (ISO):', new Date().toISOString());
-console.log('3. Server current year:', new Date().getFullYear());
-console.log('4. Server current month:', new Date().getMonth());
-console.log('5. Server current day:', new Date().getDate());
-console.log('6. Received payload:', req.body);
-console.log('====================================');
+  console.log('====== SESSION CREATION DEBUG ======');
+  console.log('1. Server current time (local):', new Date());
+  console.log('2. Server current time (ISO):', new Date().toISOString());
+  console.log('3. Server current year:', new Date().getFullYear());
+  console.log('4. Server current month:', new Date().getMonth());
+  console.log('5. Server current day:', new Date().getDate());
+  console.log('6. Received payload:', req.body);
+  console.log('====================================');
+  
   try {
     const { courseID } = req.params;
     const teacherId = req.teacher.teacherId;
@@ -247,17 +248,44 @@ console.log('====================================');
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     
-    // Parse openedAt time
+    // Get the teacher's timezone offset (in minutes) from frontend
+    // Default to 0 if not provided (UTC)
+    const teacherTimezoneOffset = req.body.timezoneOffset || 0;
+
+    console.log('Teacher timezone offset:', teacherTimezoneOffset, 'minutes');
+    console.log('Today date:', today);
+
+    // Parse openedAt time (which is in teacher's local time)
     const [openedHour, openedMinute] = openedAt.split(':').map(Number);
-    const openedDateTime = new Date(today);
-    openedDateTime.setHours(openedHour, openedMinute, 0, 0);
     
-    // Parse closedAt time (if provided)
+    // Create date in teacher's local time
+    const openedDateLocal = new Date(today);
+    openedDateLocal.setHours(openedHour, openedMinute, 0, 0);
+    
+    // Convert to UTC by subtracting the timezone offset
+    const openedDateTime = new Date(openedDateLocal.getTime() - (teacherTimezoneOffset * 60000));
+
+    console.log('Opened time conversion:', {
+      localTime: `${openedHour}:${openedMinute}`,
+      localDate: openedDateLocal,
+      utcDate: openedDateTime,
+      utcISO: openedDateTime.toISOString()
+    });
+
+    // Same for closedAt
     let closedDateTime = null;
     if (closedAt) {
       const [closedHour, closedMinute] = closedAt.split(':').map(Number);
-      closedDateTime = new Date(today);
-      closedDateTime.setHours(closedHour, closedMinute, 0, 0);
+      const closedDateLocal = new Date(today);
+      closedDateLocal.setHours(closedHour, closedMinute, 0, 0);
+      closedDateTime = new Date(closedDateLocal.getTime() - (teacherTimezoneOffset * 60000));
+      
+      console.log('Closed time conversion:', {
+        localTime: `${closedHour}:${closedMinute}`,
+        localDate: closedDateLocal,
+        utcDate: closedDateTime,
+        utcISO: closedDateTime?.toISOString()
+      });
     }
 
     // Convert times to minutes for comparison with course times
@@ -288,10 +316,18 @@ console.log('====================================');
     const session = await AttendanceSession.create({
       courseID: parseInt(courseID, 10),
       teacherId: parseInt(teacherId, 10),
-      openedAt: openedDateTime,  // Store as DATETIME
-      closedAt: closedDateTime,  // Store as DATETIME or null
+      openedAt: openedDateTime,  // Store as DATETIME in UTC
+      closedAt: closedDateTime,  // Store as DATETIME in UTC or null
       status: status === 'open' ? 'open' : 'closed',
       notes: notes || null
+    });
+
+    console.log('Session created in database:', {
+      sessionId: session.sessionId,
+      openedAt: session.openedAt,
+      closedAt: session.closedAt,
+      openedAtISO: session.openedAt.toISOString?.(),
+      closedAtISO: session.closedAt?.toISOString?.()
     });
 
     return res.status(201).json({ message: 'Attendance session created', session });
