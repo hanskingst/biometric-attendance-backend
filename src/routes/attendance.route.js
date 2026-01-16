@@ -482,7 +482,7 @@ router.get('/course/:courseID/attendance-sessions/open', async (req, res) => {
 });
 
 
-// GET /course/:courseID/attendance-sessions  (teacher lists sessions for a course)
+// GET /course/:courseID/attendance-sessions  (teacher lists sessions for the course)
 router.get('/course/:courseID/attendance-sessions', teacherAuth, async (req, res) => {
   try {
     const { courseID } = req.params;
