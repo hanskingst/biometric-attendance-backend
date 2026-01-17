@@ -20,7 +20,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/register',async (req,res)=>{
+router.post('/registerr',async (req,res)=>{
     try {
 
         const {name,email,password} = req.body;
@@ -44,7 +44,7 @@ router.post('/register',async (req,res)=>{
 });
 
 
-router.post("/login", async (req, res) => {
+router.post("/loginn", async (req, res) => {
   const { email, password } = req.body;
 
   try {

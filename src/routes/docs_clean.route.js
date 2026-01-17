@@ -45,7 +45,7 @@ router.get('/', (req, res) => {
         <h4 class="section-title">Students</h4>
         <div class="card mb-3">
           <div class="card-body">
-            <p class="mb-1 endpoint"><strong>POST</strong> <code>/students/register</code></p>
+            <p class="mb-1 endpoint"><strong>POST</strong> <code>/students/registerr</code></p>
             <p class="text-muted mb-1">Request JSON:</p>
               <p class="text-muted">Register a new student account. Email must be unique.</p>
               <pre>{ "name": "Alice Johnson", "email": "alice@example.com", "password": "SecurePass123!" }</pre>
@@ -53,7 +53,7 @@ router.get('/', (req, res) => {
             <pre>{ "message": "Student created successfully", "student": { "stdId": 1, "name": "Alice", "email": "alice@example.com" } }</pre>
 
             <hr />
-            <p class="mb-1 endpoint"><strong>POST</strong> <code>/students/login</code></p>
+            <p class="mb-1 endpoint"><strong>POST</strong> <code>/students/loginn</code></p>
               <p class="text-muted">Authenticate student with email and password credentials.</p>
               <pre>{ "email": "alice@example.com", "password": "SecurePass123!" }</pre>
             <p class="text-muted">Success (200):</p>
