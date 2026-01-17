@@ -83,7 +83,7 @@ router.post('/attendance-sessions/:sessionID/attendance', async (req, res) => {
     if (Number.isNaN(userLat) || Number.isNaN(userLon)) {
       return res.status(400).json({ message: 'Invalid latitude/longitude' });
     }
-    /* Location Strategy: Learn → Enforce
+    /* Location Strategy: Learn Enforce
      
      PHASE 1 (< 5 samples): Learning phase
      - Accept any location submission
