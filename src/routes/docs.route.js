@@ -2,7 +2,7 @@ import { Router } from 'express';
 
 const router = Router();
 
-// Public API documentation (HTML) - detailed request/response examples to support frontend development
+// Public API documentation (HTML) detailed request/response examples to support frontend development
 router.get('/', (req, res) => {
   const html = `<!doctype html>
 <html>
